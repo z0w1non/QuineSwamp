@@ -13,6 +13,9 @@ typedef char CHAR, * PCHAR;
 #define CONST const
 #define VOID void
 
+#define STRING_(s) #s
+#define STRING(s) STRING_(s)
+
 enum OWNER
 {
     SYSTEM = 0,
@@ -50,11 +53,7 @@ enum INSTRUCTION
     INSTRUCTION_NUMBER
 };
 
-typedef struct ASSEMBLY_
-{
-    UINT  size;
-    PUINT data;
-} ASSEMBLY, * PASSEMBLY;
+typedef VOID(*INSTRUCTION_IMPL)(PWORLD wld, PPROGRAM pgm);
 
 typedef struct MEMORY_
 {
@@ -89,7 +88,7 @@ UINT Random()
     return X >> 16;
 }
 
-BYTE RandomInstruction()
+UINT RandomInstruction()
 {
     return Random() % INSTRUCTION_NUMBER;
 }
@@ -454,39 +453,140 @@ VOID MALLOC_(PWORLD wld, PPROGRAM pgm)
     IncreceProgramCounter(pgm);
 }
 
-typedef VOID (* INSTRUCTION_IMPL)(PWORLD wld, PPROGRAM pgm);
+typedef struct INSTRUCTION_INFO_
+{
+    CHAR             mnemonic[32];
+    UINT             code;
+    INSTRUCTION_IMPL impl;
+} INSTRUCTION_INFO, * PINSTRUCTION_INFO;
+
+#define DECLARE_INSTRUCTION_INFO(s) {STRING(s), s, s##_}
+INSTRUCTION_INFO instruction_info_table[] = {
+    DECLARE_INSTRUCTION_INFO(NOP    ),
+    DECLARE_INSTRUCTION_INFO(NEXT   ),
+    DECLARE_INSTRUCTION_INFO(PREV   ),
+    DECLARE_INSTRUCTION_INFO(ADD    ),
+    DECLARE_INSTRUCTION_INFO(SUB    ),
+    DECLARE_INSTRUCTION_INFO(AND    ),
+    DECLARE_INSTRUCTION_INFO(OR     ),
+    DECLARE_INSTRUCTION_INFO(XOR    ),
+    DECLARE_INSTRUCTION_INFO(NOT    ),
+    DECLARE_INSTRUCTION_INFO(SLA    ),
+    DECLARE_INSTRUCTION_INFO(SRA    ),
+    DECLARE_INSTRUCTION_INFO(SLL    ),
+    DECLARE_INSTRUCTION_INFO(SRL    ),
+    DECLARE_INSTRUCTION_INFO(READ   ),
+    DECLARE_INSTRUCTION_INFO(WRITE  ),
+    DECLARE_INSTRUCTION_INFO(SAVE   ),
+    DECLARE_INSTRUCTION_INFO(SWAP   ),
+    DECLARE_INSTRUCTION_INFO(SET    ),
+    DECLARE_INSTRUCTION_INFO(JMP    ),
+    DECLARE_INSTRUCTION_INFO(JEZ    ),
+    DECLARE_INSTRUCTION_INFO(PUSH   ),
+    DECLARE_INSTRUCTION_INFO(POP    ),
+    DECLARE_INSTRUCTION_INFO(CALL   ),
+    DECLARE_INSTRUCTION_INFO(RET    ),
+    DECLARE_INSTRUCTION_INFO(PREPARE),
+    DECLARE_INSTRUCTION_INFO(MALLOC ),
+};
+#undef DECLARE_INSTRUCTION_INFO
+
+CONST PCHAR CodeToMnemonic(UINT code)
+{
+    return instruction_info_table[code].mnemonic;
+}
+
+UINT MnemonicToCode(CONST PCHAR mnemonic)
+{
+    UINT i;
+    for (i = 0; i < sizeof(instruction_info_table) / sizeof(*instruction_info_table); ++i)
+        if (stricmp(mnemonic, instruction_info_table[i].mnemonic) == 0)
+            return instruction_info_table[i].code;
+    return -1;
+}
+
+INSTRUCTION_IMPL CodeToImpl(UINT code)
+{
+    return instruction_info_table[code].impl;
+}
+
+#define ASSEMBLY_PAGE_SIZE 1024
+
+typedef struct ASSEMBLY_PAGE_
+{
+    UINT data[ASSEMBLY_PAGE_SIZE];
+    ASSEMBLY_PAGE_ * next;
+} ASSEMBLY_PAGE, * PASSEMBLY_PAGE;
+
+typedef struct ASSEMBLY_
+{
+    UINT  size;
+    PASSEMBLY_PAGE page;
+} ASSEMBLY, * PASSEMBLY;
+
+#define LINE_LENGTH 1024
+PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
+{
+    PASSEMBLY asm_;
+    PASSEMBLY_PAGE page, tmp;
+    FILE * fp;
+    UINT i, code;
+    CHAR mnemonic[LINE_LENGTH];
+
+    fp = fopen(file, "rb");
+    if (!fp)
+        return NULL;
+
+    asm_ = (PASSEMBLY)NativeMalloc(sizeof(PASSEMBLY));
+    asm_->page = (PASSEMBLY_PAGE)NativeMalloc(sizeof(PASSEMBLY_PAGE));
+    i = 0;
+    page = asm_->page;
+    while (TRUE)
+    {
+        if (i == ASSEMBLY_PAGE_SIZE)
+        {
+            page->next = (PASSEMBLY_PAGE)NativeMalloc(sizeof(PASSEMBLY_PAGE));
+            page = page->next;
+            i = 0;
+        }
+
+        fscanf(fp, "%" STRING(LINE_LENGTH) "[a-zA-Z0-9]", mnemonic);
+        mnemonic[LINE_LENGTH - 1] = '\0';
+
+        code = MnemonicToCode(mnemonic);
+        if (code != -1)
+        {
+            page->data[i] = code;
+        }
+
+        ++i;
+        ++asm_->size;
+    }
+    page->data[i] = '\0';
+
+    return asm_;
+}
+#undef LINE_LENGTH
+
+VOID ReleaseAssembly(PASSEMBLY asm_)
+{
+    PASSEMBLY_PAGE page, tmp;
+    page = asm_->page;
+    while (page->next)
+    {
+        tmp = page->next;
+        NativeFree(page);
+        page = tmp;
+    }
+    NativeFree(asm_);
+}
 
 VOID Step(PWORLD wld, PPROGRAM pgm)
 {
-    static INSTRUCTION_IMPL inst[] = {
-        NOP_    ,
-        NEXT_   ,
-        PREV_   ,
-        ADD_    ,
-        SUB_    ,
-        AND_    ,
-        OR_     ,
-        XOR_    ,
-        NOT_    ,
-        SLA_    ,
-        SRA_    ,
-        SLL_    ,
-        SRL_    ,
-        READ_   ,
-        WRITE_  ,
-        SAVE_   ,
-        SWAP_   ,
-        SET_    ,
-        JMP_    ,
-        JEZ_    ,
-        PUSH_   ,
-        POP_    ,
-        CALL_   ,
-        RET_    ,
-        PREPARE_,
-        MALLOC_ ,
-    };
-    (*inst)(wld, pgm);
+    UINT code;
+    code = GetMemory(wld, pgm->pc)->data;
+    if (code < INSTRUCTION_NUMBER)
+        CodeToImpl(code)(wld, pgm);
 }
 
 VOID Tick(PWORLD wld)
