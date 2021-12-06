@@ -123,8 +123,11 @@ PPROGRAM_QUEUE CreateProgramQueue(UINT size)
 
 VOID ReleaseProgramQueue(PPROGRAM_QUEUE pgmq)
 {
-    NativeFree(pgmq->data);
-    NativeFree(pgmq);
+    if (pgmq)
+    {
+        NativeFree(pgmq->data);
+        NativeFree(pgmq);
+    }
 }
 
 typedef struct Owner_
@@ -239,9 +242,12 @@ PWORLD CreateWorld(PWORLD_PARAM param)
 
 VOID ReleaseWorld(PWORLD wld)
 {
-    NativeFree(wld->memory);
-    ReleaseProgramQueue(wld->pgmq);
-    NativeFree(wld);
+    if (wld)
+    {
+        NativeFree(wld->memory);
+        ReleaseProgramQueue(wld->pgmq);
+        NativeFree(wld);
+    }
 }
 
 VOID WriteMemory(PWORLD wld, PPROGRAM pgm, UINT addr, UINT data)
@@ -593,7 +599,11 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
 
 VOID ReleaseAssembly(PASSEMBLY asm_)
 {
-    NativeFree(asm_->data);
+    if (asm_)
+    {
+        NativeFree(asm_->data);
+        NativeFree(asm_);
+    }
 }
 
 VOID Step(PWORLD wld, PPROGRAM pgm)
