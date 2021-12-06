@@ -445,12 +445,12 @@ VOID RET_(PWORLD wld, PPROGRAM pgm)
 
 VOID PREPARE_(PWORLD wld, PPROGRAM pgm)
 {
-    IncreceProgramCounter(pgm);
+    IncreceProgramCounter(pgm, 1);
 }
 
 VOID MALLOC_(PWORLD wld, PPROGRAM pgm)
 {
-    IncreceProgramCounter(pgm);
+    IncreceProgramCounter(pgm, 1);
 }
 
 typedef struct INSTRUCTION_INFO_
@@ -510,27 +510,28 @@ INSTRUCTION_IMPL CodeToImpl(UINT code)
     return instruction_info_table[code].impl;
 }
 
-#define ASSEMBLY_PAGE_SIZE 1024
+#define TEMP_PAGE_SIZE 1024
 
-typedef struct ASSEMBLY_PAGE_
+typedef struct TEMP_PAGE_
 {
-    UINT data[ASSEMBLY_PAGE_SIZE];
-    ASSEMBLY_PAGE_ * next;
-} ASSEMBLY_PAGE, * PASSEMBLY_PAGE;
+    UINT data[TEMP_PAGE_SIZE];
+    TEMP_PAGE_ * next;
+} TEMP_PAGE, * PTEMP_PAGE;
 
 typedef struct ASSEMBLY_
 {
     UINT  size;
-    PASSEMBLY_PAGE page;
+    PCHAR data;
 } ASSEMBLY, * PASSEMBLY;
 
-#define LINE_LENGTH 1024
+#define LINE_LENGTH_FORMAT 1024
+#define LINE_LENGTH (LINE_LENGTH_FORMAT + 1)
 PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
 {
     PASSEMBLY asm_;
-    PASSEMBLY_PAGE page, tmp;
+    PTEMP_PAGE toppage, curpage, tmppage;
     FILE * fp;
-    UINT i, code;
+    UINT pagepos, bufpos, code;
     CHAR mnemonic[LINE_LENGTH];
 
     fp = fopen(file, "rb");
@@ -538,47 +539,61 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
         return NULL;
 
     asm_ = (PASSEMBLY)NativeMalloc(sizeof(PASSEMBLY));
-    asm_->page = (PASSEMBLY_PAGE)NativeMalloc(sizeof(PASSEMBLY_PAGE));
-    i = 0;
-    page = asm_->page;
+    curpage = toppage = (PTEMP_PAGE)NativeMalloc(sizeof(PTEMP_PAGE));
+    pagepos = 0;
     while (TRUE)
     {
-        if (i == ASSEMBLY_PAGE_SIZE)
+        if (pagepos == TEMP_PAGE_SIZE)
         {
-            page->next = (PASSEMBLY_PAGE)NativeMalloc(sizeof(PASSEMBLY_PAGE));
-            page = page->next;
-            i = 0;
+            curpage->next = (PTEMP_PAGE)NativeMalloc(sizeof(PTEMP_PAGE));
+            curpage = curpage->next;
+            pagepos = 0;
         }
 
-        fscanf(fp, "%" STRING(LINE_LENGTH) "[a-zA-Z0-9]", mnemonic);
-        mnemonic[LINE_LENGTH - 1] = '\0';
+        fscanf(fp, "%" STRING(LINE_LENGTH_FORMAT) "[a-zA-Z0-9]", mnemonic);
 
         code = MnemonicToCode(mnemonic);
         if (code != -1)
         {
-            page->data[i] = code;
+            curpage->data[pagepos] = code;
         }
 
-        ++i;
+        ++pagepos;
         ++asm_->size;
     }
-    page->data[i] = '\0';
+
+    asm_->data = (PCHAR)NativeMalloc(sizeof(CHAR) * asm_->size);
+    curpage = toppage;
+    bufpos = pagepos = 0;
+    for (bufpos = 0; bufpos < asm_->size; ++bufpos)
+    {
+        if (pagepos == TEMP_PAGE_SIZE)
+        {
+            curpage = curpage->next;
+            pagepos = 0;
+        }
+        asm_->data[bufpos] = curpage->data[pagepos];
+        ++bufpos;
+    }
+
+    curpage = toppage;
+    while (curpage)
+    {
+        tmppage = curpage->next;
+        NativeFree(curpage);
+        curpage = tmppage;
+    }
+
+    fclose(fp);
 
     return asm_;
 }
 #undef LINE_LENGTH
+#undef LINE_LENGTH_FORMAT
 
 VOID ReleaseAssembly(PASSEMBLY asm_)
 {
-    PASSEMBLY_PAGE page, tmp;
-    page = asm_->page;
-    while (page->next)
-    {
-        tmp = page->next;
-        NativeFree(page);
-        page = tmp;
-    }
-    NativeFree(asm_);
+    NativeFree(asm_->data);
 }
 
 VOID Step(PWORLD wld, PPROGRAM pgm)
@@ -591,7 +606,7 @@ VOID Step(PWORLD wld, PPROGRAM pgm)
 
 VOID Tick(PWORLD wld)
 {
-    int i;
+    UINT i;
     for (i = 0; i < wld->pgmq->size; ++i)
     {
         if (wld->pgmq->data[i].owner != SYSTEM)
@@ -610,6 +625,19 @@ typedef struct SCORE_WONER_PAIR_
 int ScoreWonerPairComparator(CONST VOID * a, CONST VOID * b)
 {
     return ((PSCORE_WONER_PAIR)b)->score - ((PSCORE_WONER_PAIR)a)->score;
+}
+
+VOID DumpProgram(PPROGRAM pgm)
+{
+    printf("pid  : %x\n", pgm->pid  );
+    printf("addr : %x\n", pgm->addr );
+    printf("size : %x\n", pgm->size );
+    printf("pc   : %x\n", pgm->pc   );
+    printf("sp   : %x\n", pgm->sp   );
+    printf("ptr  : %x\n", pgm->ptr  );
+    printf("rgst : %x\n", pgm->rgst );
+    printf("tmp  : %x\n", pgm->tmp  );
+    printf("owner: %x\n", pgm->owner);
 }
 
 CONST CHAR * SuffixString(UINT n)
@@ -702,25 +730,25 @@ int main(int argc, const char ** argv)
     OR     : レジスタの値にポインタが指すメモリの値をOR演算する。
     XOR    : レジスタの値にポインタが指すメモリの値をXOR演算する。
     NOT    : レジスタの値が 0 の場合、レジスタの値を全ビット1に設定する。レジスタの値が 1 の場合、レジスタの値を全ビット0に設定する。
-    SLA    : レジスタの値にポインタが指すメモリの値で算術左シフト演算する。
-    SRA    : レジスタの値にポインタが指すメモリの値で算術右シフト演算する。
-    SLL    : レジスタの値にポインタが指すメモリの値で論理左シフト演算する。
-    SRL    : レジスタの値にポインタが指すメモリの値で論理右シフト演算する。
-    READ   : レジスタの値をポインタが指すメモリの値に設定する。
-    WRITE  : ポインタが指すメモリの値をレジスタの値に設定する。
-    SAVE   : テンポラリレジスタの値をレジスタの値に設定する。
+    SLA    : レジスタの値をポインタが指すメモリの値で算術左シフト演算する。
+    SRA    : レジスタの値をポインタが指すメモリの値で算術右シフト演算する。
+    SLL    : レジスタの値をポインタが指すメモリの値で論理左シフト演算する。
+    SRL    : レジスタの値をポインタが指すメモリの値で論理右シフト演算する。
+    READ   : レジスタの値をポインタが指すメモリの値に変更する。
+    WRITE  : ポインタが指すメモリの値をレジスタの値に変更する。
+    SAVE   : テンポラリレジスタの値をレジスタの値に変更する。
     SWAP   : レジスタの値とテンポラリレジスタの値を交換する。
-    SET    : レジスタに定数を設定する。
-    JMP    : プログラムカウンタをレジスタの値に設定する。
-    JEZ    : テンポラリレジスタの値が 0 である場合、プログラムカウンタをレジスタの値に設定する。
-    PUSH   : スタックポインタを 1 減算し、レジスタの値をスタックポインタが指すメモリの値に設定する。
-    POP    : レジスタの値をスタックポインタが指すメモリの値に設定し、スタックポインタを 1 加算する。
-    CALL   : スタックポインタを 1 減算し、スタックポインタが指すメモリの値を、プログラムカウンタの値に 2 を加算したアドレスに設定する。
-    RET    : プログラムカウンタの値をスタックポインタが指すメモリの値に設定し、スタックポイントを 1 加算する。
+    SET    : レジスタを定数に変更する。
+    JMP    : プログラムカウンタをレジスタの値に変更する。
+    JEZ    : テンポラリレジスタの値が 0 である場合、プログラムカウンタをレジスタの値に変更する。
+    PUSH   : スタックポインタを 1 減算し、レジスタの値をスタックポインタが指すメモリの値に変更する。
+    POP    : レジスタの値をスタックポインタが指すメモリの値に変更し、スタックポインタを 1 加算する。
+    CALL   : スタックポインタを 1 減算し、スタックポインタが指すメモリの値を、プログラムカウンタの値に 2 を加算したアドレスに変更する。
+    RET    : プログラムカウンタの値をスタックポインタが指すメモリの値に変更し、スタックポイントを 1 加算する。
     PREPARE: 次回 MALLOC を実行した際に割り当てられるメモリの大きさをインクリメントする。
     MALLOC : 前回 MALLOC が呼び出されてから現在までに PREPARE が実行された回数分の大きさのメモリを確保する。
-             レジスタの値を確保されたメモリの先頭のアドレスに設定する。
-             スタックポインタの値を確保されたメモリの末尾に設定する。
+             レジスタの値を確保されたメモリの先頭のアドレスに変更する。
+             スタックポインタの値を確保されたメモリの末尾に変更する。
 
 メモリの読み書きには制限がある。
 メモリに配置されたプログラムは、自身の所有者以外により所有されているプログラムが配置されたメモリに書き込むことができず、読み込むことだけができる。
