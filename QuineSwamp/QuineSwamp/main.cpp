@@ -53,25 +53,20 @@ enum INSTRUCTION
     INSTRUCTION_NUMBER
 };
 
-typedef VOID(*INSTRUCTION_IMPL)(PWORLD wld, PPROGRAM pgm);
-
 typedef struct MEMORY_
 {
-    UINT pid;
-    BYTE owner;
     UINT data;
+    BYTE owner;
 } MEMORY, * PMEMORY;
-
-UINT CreatePID()
-{
-    static UINT pid = 0;
-    return pid++;
-}
 
 VOID * NativeMalloc(UINT size)
 {
-    VOID * tmp = malloc(size);
-    memset(tmp, 0, size);
+    VOID * tmp;
+    
+    tmp = malloc(size);
+    if (tmp)
+        memset(tmp, 0, size);
+
     return tmp;
 }
 
@@ -83,8 +78,7 @@ VOID NativeFree(VOID * ptr)
 UINT Random()
 {
     static UINT X = 0;
-    UINT A = 1664525, C = 1013904223, M = 2147483647;
-    X = (X * A + C) & M;
+    X = (X * 1664525 + 1013904223) & 2147483647;
     return X >> 16;
 }
 
@@ -137,8 +131,8 @@ typedef struct Owner_
 
 typedef struct OwnerTable_
 {
-    UINT     size;
-    POwner * data;
+    UINT   size;
+    POwner data;
 } OwnerTable, * POwnerTable;
 
 typedef struct WORLD_
@@ -146,14 +140,13 @@ typedef struct WORLD_
     UINT            size;
     PMEMORY         memory;
     PPROGRAM_QUEUE  pgmq;
-    UINT            mutation_rate;
     UINT            iteration_number;
     OwnerTable      owntbl;
 } WORLD, * PWORLD;
 
 CONST PCHAR GetOwnerName(PWORLD wld, UINT owner)
 {
-    return wld->owntbl.data[owner - USER]->name;
+    return wld->owntbl.data[owner - USER].name;
 }
 
 PMEMORY GetMemory(PWORLD wld, UINT addr)
@@ -210,12 +203,10 @@ VOID InitProgram(PPROGRAM pgm, PWORLD wld, BYTE owner, PUINT data, UINT size)
     UINT i;
 
     pgm->owner = owner;
-    pgm->pid = CreatePID();
     pgm->size = size;
     pgm->addr = MemoryAllocate(wld, size);
     for (i = 0; i < size; ++i)
     {
-        GetMemory(wld, pgm->addr)->pid = pgm->pid;
         GetMemory(wld, pgm->addr)->data = data[i];
     }
     pgm->ptr = pgm->addr;
@@ -225,7 +216,6 @@ typedef struct WORLD_PARAM_
 {
     UINT world_size;
     UINT program_number;
-    UINT mutation_rate;
     UINT iteration_number;
 } WORLD_PARAM, * PWORLD_PARAM;
 
@@ -235,7 +225,6 @@ PWORLD CreateWorld(PWORLD_PARAM param)
     wld->size = param->world_size;
     wld->memory = (PMEMORY)NativeMalloc(param->world_size * sizeof(MEMORY));
     wld->pgmq = CreateProgramQueue(param->program_number);
-    wld->mutation_rate = param->mutation_rate;
     wld->iteration_number = param->iteration_number;
     return wld;
 }
@@ -459,6 +448,8 @@ VOID MALLOC_(PWORLD wld, PPROGRAM pgm)
     IncreceProgramCounter(pgm, 1);
 }
 
+typedef VOID(*INSTRUCTION_IMPL)(PWORLD wld, PPROGRAM pgm);
+
 typedef struct INSTRUCTION_INFO_
 {
     CHAR             mnemonic[32];
@@ -493,7 +484,7 @@ INSTRUCTION_INFO instruction_info_table[] = {
     DECLARE_INSTRUCTION_INFO(CALL   ),
     DECLARE_INSTRUCTION_INFO(RET    ),
     DECLARE_INSTRUCTION_INFO(PREPARE),
-    DECLARE_INSTRUCTION_INFO(MALLOC ),
+    DECLARE_INSTRUCTION_INFO(MALLOC )
 };
 #undef DECLARE_INSTRUCTION_INFO
 
@@ -539,30 +530,44 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
     FILE * fp;
     UINT pagepos, bufpos, code;
     CHAR mnemonic[LINE_LENGTH];
+    BOOL valid;
+
+    valid = FALSE;
+    toppage = NULL;
 
     fp = fopen(file, "rb");
     if (!fp)
         return NULL;
 
     asm_ = (PASSEMBLY)NativeMalloc(sizeof(PASSEMBLY));
+    if (!asm_)
+        goto cleanup;
+
     curpage = toppage = (PTEMP_PAGE)NativeMalloc(sizeof(PTEMP_PAGE));
+    if (!toppage)
+        goto cleanup;
+    
     pagepos = 0;
     while (TRUE)
     {
         if (pagepos == TEMP_PAGE_SIZE)
         {
             curpage->next = (PTEMP_PAGE)NativeMalloc(sizeof(PTEMP_PAGE));
+            if (!curpage->next)
+                goto cleanup;
+
             curpage = curpage->next;
             pagepos = 0;
         }
 
-        fscanf(fp, "%" STRING(LINE_LENGTH_FORMAT) "[a-zA-Z0-9]", mnemonic);
+        if (fscanf(fp, "%" STRING(LINE_LENGTH_FORMAT) "[a-zA-Z0-9]", mnemonic) == EOF)
+            goto cleanup;
 
         code = MnemonicToCode(mnemonic);
-        if (code != -1)
-        {
-            curpage->data[pagepos] = code;
-        }
+        if (code == -1)
+            goto cleanup;
+
+        curpage->data[pagepos] = code;
 
         ++pagepos;
         ++asm_->size;
@@ -582,15 +587,29 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
         ++bufpos;
     }
 
-    curpage = toppage;
-    while (curpage)
+cleanup:
+    fclose(fp);
+
+    if (toppage)
     {
-        tmppage = curpage->next;
-        NativeFree(curpage);
-        curpage = tmppage;
+        curpage = toppage;
+        while (curpage)
+        {
+            tmppage = curpage->next;
+            NativeFree(curpage);
+            curpage = tmppage;
+        }
     }
 
-    fclose(fp);
+    if (!valid)
+    {
+        if (asm_)
+        {
+            NativeFree(asm_->data);
+            NativeFree(asm_);
+        }
+        return NULL;
+    }
 
     return asm_;
 }
@@ -603,6 +622,16 @@ VOID ReleaseAssembly(PASSEMBLY asm_)
     {
         NativeFree(asm_->data);
         NativeFree(asm_);
+    }
+}
+
+VOID DeployAssembly(PWORLD wld, PASSEMBLY asm_, UINT owner)
+{
+    UINT i;
+    for (i = 0; i < asm_->size; ++i)
+    {
+        wld->memory[i].data = asm_->data[i];
+        wld->memory[i].owner = owner;
     }
 }
 
@@ -630,9 +659,9 @@ typedef struct SCORE_WONER_PAIR_
 {
     UINT score;
     UINT owner;
-} SCORE_WONER_PAIR, * PSCORE_WONER_PAIR;
+} SCORE_OWNER_PAIR, * PSCORE_WONER_PAIR;
 
-int ScoreWonerPairComparator(CONST VOID * a, CONST VOID * b)
+int ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b)
 {
     return ((PSCORE_WONER_PAIR)b)->score - ((PSCORE_WONER_PAIR)a)->score;
 }
@@ -664,15 +693,16 @@ VOID Judge(PWORLD wld)
     UINT i;
     PSCORE_WONER_PAIR pairs;
     
-    pairs = (SCORE_WONER_PAIR *)NativeMalloc(wld->owntbl.size * sizeof(SCORE_WONER_PAIR));
+    pairs = (SCORE_OWNER_PAIR *)NativeMalloc(wld->owntbl.size * sizeof(SCORE_OWNER_PAIR));
 
     for (i = 0; i < wld->owntbl.size; ++i)
         pairs[i].owner = i + USER;
 
     for (i = 0; i < wld->pgmq->size; ++i)
-        ++pairs[wld->pgmq->data[i].owner - USER].score;
+        if (wld->pgmq->data[i].owner != SYSTEM)
+            pairs[wld->pgmq->data[i].owner - USER].score += wld->pgmq->data[i].size;
 
-    qsort(pairs, wld->owntbl.size, sizeof(SCORE_WONER_PAIR), ScoreWonerPairComparator);
+    qsort(pairs, wld->owntbl.size, sizeof(SCORE_OWNER_PAIR), ScoreOwnerPairComparator);
 
     for (i = 0; i < wld->owntbl.size; ++i)
         printf("%d%s %s (%d)\n", i + 1, SuffixString(i + 1), GetOwnerName(wld, pairs[i].owner), pairs[i].score);
@@ -687,14 +717,43 @@ VOID Run(PWORLD wld)
         Tick(wld);
 }
 
-int main(int argc, const char ** argv)
+VOID PrintHelp()
+{
+    fprintf(stderr, "");
+}
+
+VOID ParseCommandLine(PWORLD wld, int argc, CONST PCHAR * argv)
+{
+    UINT owner, owner_number;
+    PASSEMBLY asm_;
+
+    if (argc % 2 != 1)
+    {
+        PrintHelp();
+        return;
+    }
+
+    owner_number = (argc - 1) / 2;
+    for (owner = 0; owner < owner_number; ++owner)
+    {
+        strcpy(wld->owntbl.data[owner].name, argv[owner_number * 2]);
+        asm_ = CreateAssemblyFromFile(argv[owner_number * 2 + 1]);
+        if (asm_)
+        {
+            DeployAssembly(wld, asm_, owner);
+            ReleaseAssembly(asm_);
+        }
+    }
+}
+
+int main(int argc, CONST PCHAR * argv)
 {
     PWORLD wld;
 
     WORLD_PARAM param = {
         1000 * 1000 * 100,
-        1000,
-        1000 * 1000 * 1000 * 10
+        100,
+        1000 * 1000
     };
 
     wld = CreateWorld(&param);
