@@ -740,6 +740,8 @@ CONST CHAR * SuffixString(UINT n)
         return "st";
     if (n == 2)
         return "nd";
+    if (n == 3)
+        return "rd";
     return "th";
 }
 
@@ -774,7 +776,7 @@ VOID Run(PWORLD wld)
 
 VOID PrintHelp()
 {
-    fprintf(stderr, "");
+    fprintf(stdin, "");
 }
 
 VOID ParseCommandLine(PWORLD wld, int argc, CONST PCHAR * argv)
