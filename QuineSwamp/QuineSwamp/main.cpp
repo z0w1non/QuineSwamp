@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <limits.h>
+#include <ctype.h>
 
 typedef unsigned char BYTE, * PBYTE;
 typedef unsigned char BOOL;
@@ -507,6 +509,55 @@ INSTRUCTION_IMPL CodeToImpl(UINT code)
     return instruction_info_table[code].impl;
 }
 
+BOOL StringToUint(CONST PCHAR s, PUINT value)
+{
+    UINT value;
+    PCHAR cur;
+
+    if (s == NULL || s[0] == '\0')
+        return FALSE;
+
+    if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
+    {
+        for (cur = s + 2; *cur != '\0'; ++cur)
+            if (!isxdigit(*cur))
+                return FALSE;
+
+        if (strlen(s) > 10)
+            return FALSE;
+
+        *value = 0;
+        for (cur = s + 2; *cur != '\0'; ++cur)
+        {
+            *value *= 0x10;
+            if (isdigit(*cur))
+                *value += *cur - '0';
+            else if (*cur >= 'a' && *cur <= 'f')
+                *value += *cur - 'a' + 0xa;
+            else if (*cur >= 'A' && *cur <= 'F')
+                *value += *cur - 'A' + 0xa;
+        }
+        return TRUE;
+    }
+    else
+    {
+        for (cur = s; *cur != '\0'; ++cur)
+            if (!isdigit(*cur))
+                return FALSE;
+
+        if (strlen(s) > 10)
+            return FALSE;
+
+        *value = 0;
+        for (cur = s; *cur != '\0'; ++cur)
+        {
+            *value *= 10;
+            *value += *cur - '0';
+        }
+        return TRUE;
+    }
+}
+
 #define TEMP_PAGE_SIZE 1024
 
 typedef struct TEMP_PAGE_
@@ -528,7 +579,7 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
     PASSEMBLY asm_;
     PTEMP_PAGE toppage, curpage, tmppage;
     FILE * fp;
-    UINT pagepos, bufpos, code;
+    UINT pagepos, bufpos, data;
     CHAR mnemonic[LINE_LENGTH];
     BOOL valid;
 
@@ -563,11 +614,14 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
         if (fscanf(fp, "%" STRING(LINE_LENGTH_FORMAT) "[a-zA-Z0-9]", mnemonic) == EOF)
             goto cleanup;
 
-        code = MnemonicToCode(mnemonic);
-        if (code == -1)
-            goto cleanup;
+        if (!StringToUint(mnemonic, &data))
+        {
+            data = MnemonicToCode(mnemonic);
+            if (data == -1)
+                goto cleanup;
+        }
 
-        curpage->data[pagepos] = code;
+        curpage->data[pagepos] = data;
 
         ++pagepos;
         ++asm_->size;
@@ -628,6 +682,7 @@ VOID ReleaseAssembly(PASSEMBLY asm_)
 VOID DeployAssembly(PWORLD wld, PASSEMBLY asm_, UINT owner)
 {
     UINT i;
+
     for (i = 0; i < asm_->size; ++i)
     {
         wld->memory[i].data = asm_->data[i];
