@@ -511,7 +511,6 @@ INSTRUCTION_IMPL CodeToImpl(UINT code)
 
 BOOL StringToUint(CONST PCHAR s, PUINT value)
 {
-    UINT value;
     PCHAR cur;
 
     if (s == NULL || s[0] == '\0')
@@ -569,7 +568,7 @@ typedef struct TEMP_PAGE_
 typedef struct ASSEMBLY_
 {
     UINT  size;
-    PCHAR data;
+    PUINT data;
 } ASSEMBLY, * PASSEMBLY;
 
 #define LINE_LENGTH_FORMAT 1024
@@ -590,11 +589,11 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
     if (!fp)
         return NULL;
 
-    asm_ = (PASSEMBLY)NativeMalloc(sizeof(PASSEMBLY));
+    asm_ = (PASSEMBLY)NativeMalloc(sizeof(ASSEMBLY));
     if (!asm_)
         goto cleanup;
 
-    curpage = toppage = (PTEMP_PAGE)NativeMalloc(sizeof(PTEMP_PAGE));
+    curpage = toppage = (PTEMP_PAGE)NativeMalloc(sizeof(TEMP_PAGE));
     if (!toppage)
         goto cleanup;
     
@@ -603,16 +602,19 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
     {
         if (pagepos == TEMP_PAGE_SIZE)
         {
-            curpage->next = (PTEMP_PAGE)NativeMalloc(sizeof(PTEMP_PAGE));
+            curpage->next = (PTEMP_PAGE)NativeMalloc(sizeof(TEMP_PAGE));
             if (!curpage->next)
                 goto cleanup;
 
             curpage = curpage->next;
             pagepos = 0;
         }
-
-        if (fscanf(fp, "%" STRING(LINE_LENGTH_FORMAT) "[a-zA-Z0-9]", mnemonic) == EOF)
-            goto cleanup;
+        printf("%d\n", __LINE__);
+        printf("pagepos=%d\n", pagepos);
+        printf("asm_->size=%d\n", asm_->size);
+        if (fscanf(fp, "%" STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9]%c*", mnemonic) == EOF)
+            break;
+        printf("mnemonic=%s\n", mnemonic);
 
         if (!StringToUint(mnemonic, &data))
         {
@@ -620,6 +622,7 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
             if (data == -1)
                 goto cleanup;
         }
+        printf("data=%u\n", data);
 
         curpage->data[pagepos] = data;
 
@@ -627,7 +630,7 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
         ++asm_->size;
     }
 
-    asm_->data = (PCHAR)NativeMalloc(sizeof(CHAR) * asm_->size);
+    asm_->data = (PUINT)NativeMalloc(sizeof(PUINT) * asm_->size);
     curpage = toppage;
     bufpos = pagepos = 0;
     for (bufpos = 0; bufpos < asm_->size; ++bufpos)
@@ -638,8 +641,9 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
             pagepos = 0;
         }
         asm_->data[bufpos] = curpage->data[pagepos];
-        ++bufpos;
+        ++pagepos;
     }
+    valid = TRUE;
 
 cleanup:
     fclose(fp);
@@ -714,11 +718,11 @@ typedef struct SCORE_WONER_PAIR_
 {
     UINT score;
     UINT owner;
-} SCORE_OWNER_PAIR, * PSCORE_WONER_PAIR;
+} SCORE_OWNER_PAIR, * PSCORE_OWNER_PAIR;
 
 int ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b)
 {
-    return ((PSCORE_WONER_PAIR)b)->score - ((PSCORE_WONER_PAIR)a)->score;
+    return ((PSCORE_OWNER_PAIR)b)->score - ((PSCORE_OWNER_PAIR)a)->score;
 }
 
 VOID DumpProgram(PPROGRAM pgm)
@@ -748,9 +752,9 @@ CONST CHAR * SuffixString(UINT n)
 VOID Judge(PWORLD wld)
 {
     UINT i;
-    PSCORE_WONER_PAIR pairs;
+    PSCORE_OWNER_PAIR pairs;
     
-    pairs = (SCORE_OWNER_PAIR *)NativeMalloc(wld->owntbl.size * sizeof(SCORE_OWNER_PAIR));
+    pairs = (PSCORE_OWNER_PAIR)NativeMalloc(wld->owntbl.size * sizeof(SCORE_OWNER_PAIR));
 
     for (i = 0; i < wld->owntbl.size; ++i)
         pairs[i].owner = i + USER;
@@ -774,22 +778,42 @@ VOID Run(PWORLD wld)
         Tick(wld);
 }
 
-BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST CHAR * file)
+BOOL GetAssemblyFilePath(CONST CHAR * path, CHAR * asmpath)
+{
+    CONST CHAR * name, * ext;
+
+    if (!path || !asmpath)
+        return FALSE;
+
+    name = strrchr(path, '\\');
+    ext = strrchr(path, '.');
+
+    if ((!name && !ext) || (name && !ext) || (name && ext && ext < name))
+    {
+        strcpy(asmpath, path);
+        strcat(asmpath, ".qs");
+        return TRUE;
+    }
+
+    strcpy(asmpath, path);
+    asmpath[ext - path] = '\0';
+    strcat(asmpath, ".qs");
+    return TRUE;
+}
+
+BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST CHAR * path)
 {
     FILE * fp;
     BOOL result;
-    UINT i;
 
     result = FALSE;
 
-    fp = fopen(file, "wb");
+    fp = fopen(path, "wb");
     if (!fp)
         return NULL;
 
-    for (i = 0; i < asm_->size; ++i)
-        fprintf(fp, "%u", asm_->data[i]);
+    fwrite(asm_->data, sizeof(UINT), asm_->size, fp);
 
-cleanup:
     fclose(fp);
 
     return result;
@@ -800,16 +824,38 @@ VOID PrintHelp()
     fprintf(stdin, "");
 }
 
-VOID ParseCommandLine(PWORLD wld, int argc, CONST PCHAR * argv)
+VOID ParseCommandLine(int argc, CONST PCHAR * argv)
 {
     UINT owner, owner_number;
     PASSEMBLY asm_;
+    CHAR asmpath[MAX_PATH];
+    PWORLD wld;
+
+    WORLD_PARAM param = {
+        1000 * 1000 * 100,
+        100,
+        1000 * 1000
+    };
+
+    if (argc == 2)
+    {
+        PASSEMBLY asm_ = CreateAssemblyFromFile(argv[1]);
+        if (asm_)
+        {
+            memset(asmpath, 0, sizeof(asmpath));
+            if (GetAssemblyFilePath(argv[1], asmpath))
+                CreateAssemblyFile(asm_, asmpath);
+        }
+        return;
+    }
 
     if (argc % 2 != 1)
     {
         PrintHelp();
         return;
     }
+
+    wld = CreateWorld(&param);
 
     owner_number = (argc - 1) / 2;
     for (owner = 0; owner < owner_number; ++owner)
@@ -822,24 +868,15 @@ VOID ParseCommandLine(PWORLD wld, int argc, CONST PCHAR * argv)
             ReleaseAssembly(asm_);
         }
     }
+
+    Run(wld);
+    Judge(wld);
+    ReleaseWorld(wld);
 }
 
 int main(int argc, CONST PCHAR * argv)
 {
-    PWORLD wld;
-
-    WORLD_PARAM param = {
-        1000 * 1000 * 100,
-        100,
-        1000 * 1000
-    };
-
-    wld = CreateWorld(&param);
-
-    Run(wld);
-    Judge(wld);
-
-    ReleaseWorld(wld);
+    ParseCommandLine(argc, argv);
     return 0;
 }
 
