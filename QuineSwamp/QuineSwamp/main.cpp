@@ -774,6 +774,27 @@ VOID Run(PWORLD wld)
         Tick(wld);
 }
 
+BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST CHAR * file)
+{
+    FILE * fp;
+    BOOL result;
+    UINT i;
+
+    result = FALSE;
+
+    fp = fopen(file, "wb");
+    if (!fp)
+        return NULL;
+
+    for (i = 0; i < asm_->size; ++i)
+        fprintf(fp, "%u", asm_->data[i]);
+
+cleanup:
+    fclose(fp);
+
+    return result;
+}
+
 VOID PrintHelp()
 {
     fprintf(stdin, "");
@@ -902,5 +923,11 @@ int main(int argc, CONST PCHAR * argv)
 このゲームは完全な再現性を有する。
 乱数生成の方式は公開され、変更されない。
 プログラムが自己複製する際に突然変異は発生しない。
+
+アセンブリは以下のフォーマットで記述する
+
+SET 1
+PUSH
+POP
 
 */
