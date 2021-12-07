@@ -609,12 +609,9 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
             curpage = curpage->next;
             pagepos = 0;
         }
-        printf("%d\n", __LINE__);
-        printf("pagepos=%d\n", pagepos);
-        printf("asm_->size=%d\n", asm_->size);
+
         if (fscanf(fp, "%" STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9]%c*", mnemonic) == EOF)
             break;
-        printf("mnemonic=%s\n", mnemonic);
 
         if (!StringToUint(mnemonic, &data))
         {
@@ -622,7 +619,6 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
             if (data == -1)
                 goto cleanup;
         }
-        printf("data=%u\n", data);
 
         curpage->data[pagepos] = data;
 
