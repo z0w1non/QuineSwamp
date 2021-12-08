@@ -17,6 +17,7 @@ typedef CONST CHAR * CONST_STRING;
 #define TRUE  1
 #define FALSE 0
 #define MAX_PATH 260
+#define MAX_LABEL 36
 
 #define TO_STRING_(s) #s
 #define TO_STRING(s) TO_STRING_(s)
@@ -69,6 +70,8 @@ enum INSTRUCTION
     FORWARD_DECLARATION(INSTRUCTION_INFO);
     FORWARD_DECLARATION(ASSEMBLY        );
     FORWARD_DECLARATION(SCORE_WONER_PAIR);
+    FORWARD_DECLARATION(STRING_UINT_PAIR);
+    FORWARD_DECLARATION(STRING_UINT_MAP );
 #undef FORWARD_DECLARATION
 
 typedef struct MEMORY_
@@ -145,6 +148,19 @@ typedef struct SCORE_WONER_PAIR_
     UINT score;
     UINT owner;
 } SCORE_OWNER_PAIR, * PSCORE_OWNER_PAIR;
+
+typedef struct STRING_UINT_PAIR_
+{
+    CHAR    label[MAX_LABEL];
+    UINT    addr;
+} STRING_UINT_PAIR, * PSTRING_UINT_PAIR;
+
+typedef struct STRING_UINT_MAP_
+{
+    UINT size;
+    UINT maxsize;
+    PSTRING_UINT_PAIR data;
+} STRING_UINT_MAP, * PSTRING_UINT_MAP;
 
 VOID * NativeMalloc(UINT size);
 VOID * NativeRealloc(VOID * ptr, UINT size);
@@ -1029,6 +1045,34 @@ VOID ParseCommandLine(INT argc, CONST_STRING * argv)
     RunWorld(wld);
     JudgeResult(wld);
     ReleaseWorld(wld);
+}
+
+PSTRING_UINT_MAP CreateStringUIntMap()
+{
+    PSTRING_UINT_MAP suimap;
+
+    suimap = (PSTRING_UINT_MAP)NativeMalloc(sizeof(STRING_UINT_MAP));
+    if (!suimap)
+        return NULL;
+    
+    //TODO
+
+    return suimap;
+}
+
+VOID ReleaseStringUIntMap(PSTRING_UINT_MAP suimap)
+{
+    //TODO
+}
+
+BOOL StringUIntMap_Add(CONST_STRING s, UINT ui)
+{
+    //TODO
+}
+
+UINT StringUIntMap_Find(CONST_STRING s)
+{
+    //TODO
 }
 
 INT main(INT argc, CONST_STRING * argv)
