@@ -111,7 +111,6 @@ typedef struct OWNER_TABLE_
 
 typedef struct WORLD_
 {
-    UINT            size;
     PMEMORY         mem;
     PPROGRAM_QUEUE  pgmq;
     UINT            iteration_number;
@@ -162,9 +161,9 @@ PBYTE MemoryData(PMEMORY mem, UINT addr);
 PBYTE MemoryOwner(PMEMORY mem, UINT addr);
 
 VOID InitMemory(PMEMORY mem, UINT addr, UINT size);
-VOID ReleaseOldestProgram(PWORLD wld, PPROGRAM_QUEUE pgmq);
-UINT MemoryAllocate(PWORLD wld, UINT size);
-VOID InitProgram(PPROGRAM pgm, PWORLD wld, BYTE owner, PBYTE data, UINT size);
+VOID ReleaseOldestProgram(PMEMORY mem, PPROGRAM_QUEUE pgmq);
+UINT MemoryAllocate(PMEMORY mem, PPROGRAM_QUEUE pgmq, UINT size);
+VOID InitProgram(PPROGRAM pgm, PMEMORY mem, PPROGRAM_QUEUE pgmq, BYTE owner, PBYTE data, UINT size);
 
 PMEMORY CreateMemory(UINT size);
 VOID ReleaseMemory(PMEMORY mem);
@@ -178,7 +177,7 @@ VOID ReleaseWorld(PWORLD wld);
 VOID WriteMemory(PMEMORY mem, PPROGRAM pgm, UINT addr, BYTE data);
 BYTE ReadMemory(PMEMORY mem, PPROGRAM pgm, UINT addr);
 
-BOOL OutOfMemory(PWORLD wld, UINT addr);
+BOOL OutOfMemory(PMEMORY mem, UINT addr);
 VOID RoundProgramCounter(PPROGRAM pgm);
 VOID IncreceProgramCounter(PPROGRAM pgm, UINT cnt);
 VOID DecreceProgramCounter(PPROGRAM pgm);
@@ -281,31 +280,31 @@ VOID InitMemory(PMEMORY mem, UINT addr, UINT size)
     memset(MemoryData(mem, addr), 0, sizeof(MEMORY) * size);
 }
 
-VOID ReleaseOldestProgram(PWORLD wld, PPROGRAM_QUEUE pgmq)
+VOID ReleaseOldestProgram(PMEMORY mem, PPROGRAM_QUEUE pgmq)
 {
-    InitMemory(wld->mem, pgmq->data[pgmq->cur].addr, pgmq->data[pgmq->cur].size);
+    InitMemory(mem, pgmq->data[pgmq->cur].addr, pgmq->data[pgmq->cur].size);
     memset(&pgmq->data[pgmq->cur], 0, sizeof(PROGRAM));
     ++pgmq->cur;
     if (pgmq->cur == pgmq->size)
         pgmq->cur = 0;
 }
 
-UINT MemoryAllocate(PWORLD wld, UINT size)
+UINT MemoryAllocate(PMEMORY mem, PPROGRAM_QUEUE pgmq, UINT size)
 {
     UINT i, tmp;
     i = 0;
     while (TRUE)
     {
-        while (i < wld->size)
+        while (!OutOfMemory(mem, i))
         {
-            if (*MemoryOwner(wld->mem, i) == SYSTEM)
+            if (*MemoryOwner(mem, i) == SYSTEM)
             {
                 tmp = 1;
-                while (tmp < size && i + tmp < wld->size && *MemoryOwner(wld->mem, i + tmp) == SYSTEM)
+                while (tmp < size && !OutOfMemory(mem, i + tmp) && *MemoryOwner(mem, i + tmp) == SYSTEM)
                     ++tmp;
                 if (tmp == size)
                 {
-                    InitMemory(wld->mem, i, size);
+                    InitMemory(mem, i, size);
                     return i;
                 }
                 i += tmp;
@@ -315,22 +314,22 @@ UINT MemoryAllocate(PWORLD wld, UINT size)
                 ++i;
             }
         }
-        ReleaseOldestProgram(wld, wld->pgmq);
+        ReleaseOldestProgram(mem, pgmq);
     }
 
     return NULL;
 }
 
-VOID InitProgram(PPROGRAM pgm, PWORLD wld, BYTE owner, PBYTE data, UINT size)
+VOID InitProgram(PPROGRAM pgm, PMEMORY mem, PPROGRAM_QUEUE pgmq, BYTE owner, PBYTE data, UINT size)
 {
     UINT i;
 
     pgm->owner = owner;
     pgm->size = size;
-    pgm->addr = MemoryAllocate(wld, size);
+    pgm->addr = MemoryAllocate(mem, pgmq, size);
     for (i = 0; i < size; ++i)
     {
-        *MemoryData(wld->mem, pgm->addr) = data[i];
+        *MemoryData(mem, pgm->addr) = data[i];
     }
     pgm->ptr = pgm->addr;
 }
@@ -433,9 +432,9 @@ BYTE ReadMemory(PMEMORY mem, PPROGRAM pgm, UINT addr)
     return *MemoryData(mem, addr);
 }
 
-BOOL OutOfMemory(PWORLD wld, UINT addr)
+BOOL OutOfMemory(PMEMORY mem, UINT addr)
 {
-    return wld->size >= addr;
+    return mem->size >= addr;
 }
 
 VOID RoundProgramCounter(PPROGRAM pgm)
