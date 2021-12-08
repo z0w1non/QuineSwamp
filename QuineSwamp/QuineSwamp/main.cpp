@@ -4,19 +4,21 @@
 #include <limits.h>
 #include <ctype.h>
 
+#define CONST const
+#define VOID void
+
 typedef unsigned char BYTE, * PBYTE;
 typedef unsigned char BOOL;
 typedef unsigned int UINT, * PUINT;
-typedef char CHAR, * PCHAR;
+typedef char CHAR, * PCHAR, * STRING;
+typedef CONST CHAR * CONST_STRING;
 
 #define TRUE  1
 #define FALSE 0
 #define MAX_PATH 260
-#define CONST const
-#define VOID void
 
-#define STRING_(s) #s
-#define STRING(s) STRING_(s)
+#define TO_STRING_(s) #s
+#define TO_STRING(s) TO_STRING_(s)
 
 enum OWNER
 {
@@ -146,7 +148,7 @@ typedef struct WORLD_
     OwnerTable      owntbl;
 } WORLD, * PWORLD;
 
-CONST PCHAR GetOwnerName(PWORLD wld, UINT owner)
+CONST_STRING GetOwnerName(PWORLD wld, UINT owner)
 {
     return wld->owntbl.data[owner - USER].name;
 }
@@ -180,14 +182,15 @@ UINT MemoryAllocate(PWORLD wld, UINT size)
         {
             if (GetMemory(wld, i)->owner == SYSTEM)
             {
-                tmp = 0;
-                while (tmp < size && GetMemory(wld, i + tmp)->owner == SYSTEM)
+                tmp = 1;
+                while (tmp < size && i + tmp < wld->size && GetMemory(wld, i + tmp)->owner == SYSTEM)
                     ++tmp;
                 if (tmp == size)
                 {
                     InitMemory(wld, i, size);
                     return i;
                 }
+                i += tmp;
             }
             else
             {
@@ -459,7 +462,7 @@ typedef struct INSTRUCTION_INFO_
     INSTRUCTION_IMPL impl;
 } INSTRUCTION_INFO, * PINSTRUCTION_INFO;
 
-#define DECLARE_INSTRUCTION_INFO(s) {STRING(s), s, s##_}
+#define DECLARE_INSTRUCTION_INFO(s) {TO_STRING(s), s, s##_}
 INSTRUCTION_INFO instruction_info_table[] = {
     DECLARE_INSTRUCTION_INFO(NOP    ),
     DECLARE_INSTRUCTION_INFO(NEXT   ),
@@ -490,12 +493,12 @@ INSTRUCTION_INFO instruction_info_table[] = {
 };
 #undef DECLARE_INSTRUCTION_INFO
 
-CONST PCHAR CodeToMnemonic(UINT code)
+CONST_STRING CodeToMnemonic(UINT code)
 {
     return instruction_info_table[code].mnemonic;
 }
 
-UINT MnemonicToCode(CONST PCHAR mnemonic)
+UINT MnemonicToCode(CONST_STRING mnemonic)
 {
     UINT i;
     for (i = 0; i < sizeof(instruction_info_table) / sizeof(*instruction_info_table); ++i)
@@ -509,9 +512,9 @@ INSTRUCTION_IMPL CodeToImpl(UINT code)
     return instruction_info_table[code].impl;
 }
 
-BOOL StringToUint(CONST PCHAR s, PUINT value)
+BOOL StringToUint(CONST_STRING s, PUINT value)
 {
-    PCHAR cur;
+    CONST_STRING cur;
 
     if (s == NULL || s[0] == '\0')
         return FALSE;
@@ -573,7 +576,7 @@ typedef struct ASSEMBLY_
 
 #define LINE_LENGTH_FORMAT 1024
 #define LINE_LENGTH (LINE_LENGTH_FORMAT + 1)
-PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
+PASSEMBLY CreateAssemblyFromFile(CONST_STRING file)
 {
     PASSEMBLY asm_;
     PTEMP_PAGE toppage, curpage, tmppage;
@@ -610,7 +613,7 @@ PASSEMBLY CreateAssemblyFromFile(CONST PCHAR file)
             pagepos = 0;
         }
 
-        if (fscanf(fp, "%" STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9]%c*", mnemonic) == EOF)
+        if (fscanf(fp, "%" TO_STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9]%c*", mnemonic) == EOF)
             break;
 
         if (!StringToUint(mnemonic, &data))
@@ -734,7 +737,7 @@ VOID DumpProgram(PPROGRAM pgm)
     printf("owner: %x\n", pgm->owner);
 }
 
-CONST CHAR * SuffixString(UINT n)
+CONST_STRING SuffixString(UINT n)
 {
     if (n == 1)
         return "st";
@@ -774,9 +777,9 @@ VOID Run(PWORLD wld)
         Tick(wld);
 }
 
-BOOL GetAssemblyFilePath(CONST CHAR * path, CHAR * asmpath)
+BOOL GetAssemblyFilePath(CONST_STRING path, CHAR * asmpath)
 {
-    CONST CHAR * name, * ext;
+    CONST_STRING name, ext;
 
     if (!path || !asmpath)
         return FALSE;
@@ -797,7 +800,7 @@ BOOL GetAssemblyFilePath(CONST CHAR * path, CHAR * asmpath)
     return TRUE;
 }
 
-BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST CHAR * path)
+BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST_STRING path)
 {
     FILE * fp;
     BOOL result;
@@ -820,7 +823,7 @@ VOID PrintHelp()
     fprintf(stdin, "");
 }
 
-VOID ParseCommandLine(int argc, CONST PCHAR * argv)
+VOID ParseCommandLine(int argc, CONST_STRING * argv)
 {
     UINT owner, owner_number;
     PASSEMBLY asm_;
@@ -870,7 +873,7 @@ VOID ParseCommandLine(int argc, CONST PCHAR * argv)
     ReleaseWorld(wld);
 }
 
-int main(int argc, CONST PCHAR * argv)
+int main(int argc, CONST_STRING * argv)
 {
     ParseCommandLine(argc, argv);
     return 0;
@@ -899,7 +902,6 @@ int main(int argc, CONST PCHAR * argv)
 プログラムカウンタがプログラムのコードの範囲を超えた場合、プログラムカウンタは配置されたコードの先頭を指すよう設定される。
 
 命令セットは brainf*ck を参考に設計されている。
-基本的にインクリメントやデクリメントを繰り返すことで複雑な処理を記述する。
 
     NOP    : 何も行わない。
     NEXT   : ポインタが指すメモリのアドレスにレジスタの値を加算する。
