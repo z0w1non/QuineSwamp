@@ -10,6 +10,7 @@
 typedef unsigned char BYTE, * PBYTE;
 typedef unsigned char BOOL;
 typedef unsigned int UINT, * PUINT;
+typedef int INT, * PINT;
 typedef char CHAR, * PCHAR, * STRING;
 typedef CONST CHAR * CONST_STRING;
 
@@ -20,7 +21,9 @@ typedef CONST CHAR * CONST_STRING;
 #define TO_STRING_(s) #s
 #define TO_STRING(s) TO_STRING_(s)
 
-enum OWNER
+#define FORWARD_DECLARATION(type) struct type##_; typedef type##_ type, * P##type;
+
+enum
 {
     SYSTEM = 0,
     USER   = 1
@@ -57,39 +60,23 @@ enum INSTRUCTION
     INSTRUCTION_NUMBER
 };
 
+FORWARD_DECLARATION(MEMORY)
+FORWARD_DECLARATION(PROGRAM)
+FORWARD_DECLARATION(PROGRAM_QUEUE)
+FORWARD_DECLARATION(OWNER)
+FORWARD_DECLARATION(OWNER_TABLE)
+FORWARD_DECLARATION(WORLD)
+FORWARD_DECLARATION(WORLD_PARAM)
+FORWARD_DECLARATION(INSTRUCTION_INFO)
+FORWARD_DECLARATION(ASSEMBLY)
+FORWARD_DECLARATION(SCORE_WONER_PAIR)
+
 typedef struct MEMORY_
 {
-    UINT data;
-    BYTE owner;
+    UINT    size;
+    PBYTE   data;
+    PBYTE   owner;
 } MEMORY, * PMEMORY;
-
-VOID * NativeMalloc(UINT size)
-{
-    VOID * tmp;
-    
-    tmp = malloc(size);
-    if (tmp)
-        memset(tmp, 0, size);
-
-    return tmp;
-}
-
-VOID NativeFree(VOID * ptr)
-{
-    free(ptr);
-}
-
-UINT Random()
-{
-    static UINT X = 0;
-    X = (X * 1664525 + 1013904223) & 2147483647;
-    return X >> 16;
-}
-
-UINT RandomInstruction()
-{
-    return Random() % INSTRUCTION_NUMBER;
-}
 
 typedef struct PROGRAM_
 {
@@ -111,6 +98,152 @@ typedef struct PROGRAM_QUEUE_
     UINT     cur;
 } PROGRAM_QUEUE, * PPROGRAM_QUEUE;
 
+typedef struct OWNER_
+{
+    CHAR name[MAX_PATH];
+} OWNER, * POWNER;
+
+typedef struct OWNER_TABLE_
+{
+    UINT   size;
+    POWNER data;
+} OWNER_TABLE, * POWNER_TABLE;
+
+typedef struct WORLD_
+{
+    UINT            size;
+    PMEMORY         mem;
+    PPROGRAM_QUEUE  pgmq;
+    UINT            iteration_number;
+    POWNER_TABLE    owntbl;
+} WORLD, * PWORLD;
+
+typedef struct WORLD_PARAM_
+{
+    UINT memory_size;
+    UINT program_number;
+    UINT iteration_number;
+    UINT owner_number;
+} WORLD_PARAM, * PWORLD_PARAM;
+
+typedef VOID(*INSTRUCTION_IMPL)(PMEMORY mem, PPROGRAM pgm);
+
+typedef struct INSTRUCTION_INFO_
+{
+    CHAR             mnemonic[32];
+    BYTE             code;
+    INSTRUCTION_IMPL impl;
+} INSTRUCTION_INFO, * PINSTRUCTION_INFO;
+
+typedef struct ASSEMBLY_
+{
+    UINT  size, maxsize;
+    PBYTE data;
+} ASSEMBLY, * PASSEMBLY;
+
+typedef struct SCORE_WONER_PAIR_
+{
+    UINT score;
+    UINT owner;
+} SCORE_OWNER_PAIR, * PSCORE_OWNER_PAIR;
+
+VOID * NativeMalloc(UINT size);
+VOID * NativeRealloc(VOID * ptr, UINT size);
+VOID NativeFree(VOID * ptr);
+
+UINT Random();
+BYTE RandomInstruction();
+
+PPROGRAM_QUEUE CreateProgramQueue(UINT size);
+VOID ReleaseProgramQueue(PPROGRAM_QUEUE pgmq);
+CONST_STRING OwnerName(POWNER_TABLE owntbl, UINT owner);
+
+PBYTE MemoryData(PMEMORY mem, UINT addr);
+PBYTE MemoryOwner(PMEMORY mem, UINT addr);
+
+VOID InitMemory(PMEMORY mem, UINT addr, UINT size);
+VOID ReleaseOldestProgram(PWORLD wld, PPROGRAM_QUEUE pgmq);
+UINT MemoryAllocate(PWORLD wld, UINT size);
+VOID InitProgram(PPROGRAM pgm, PWORLD wld, BYTE owner, PBYTE data, UINT size);
+
+PMEMORY CreateMemory(UINT size);
+VOID ReleaseMemory(PMEMORY mem);
+
+POWNER_TABLE CreateOwnerTable(UINT size);
+VOID ReleaseOwnerTable(POWNER_TABLE owntbl);
+
+PWORLD CreateWorld(PWORLD_PARAM param);
+VOID ReleaseWorld(PWORLD wld);
+
+VOID WriteMemory(PMEMORY mem, PPROGRAM pgm, UINT addr, BYTE data);
+BYTE ReadMemory(PMEMORY mem, PPROGRAM pgm, UINT addr);
+
+BOOL OutOfMemory(PWORLD wld, UINT addr);
+VOID RoundProgramCounter(PPROGRAM pgm);
+VOID IncreceProgramCounter(PPROGRAM pgm, UINT cnt);
+VOID DecreceProgramCounter(PPROGRAM pgm);
+
+CONST_STRING CodeToMnemonic(BYTE code);
+BYTE MnemonicToCode(CONST_STRING mnemonic);
+INSTRUCTION_IMPL CodeToImpl(BYTE code);
+BOOL StringToUint(CONST_STRING s, PUINT value);
+
+VOID WriteUInt(PBYTE destination, UINT value);
+UINT ReadUInt(PBYTE destination);
+
+BOOL ReserveAssembly(PASSEMBLY asm_, UINT size);
+PASSEMBLY CreateAssemblyFromFile(CONST_STRING file);
+VOID ReleaseAssembly(PASSEMBLY asm_);
+VOID DeployAssembly(PMEMORY mem, PASSEMBLY asm_, UINT owner);
+
+VOID Step(PMEMORY mem, PPROGRAM pgm);
+VOID Tick(PMEMORY mem, PPROGRAM_QUEUE pgmq);
+
+INT ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b);
+VOID DumpProgram(PPROGRAM pgm);
+CONST_STRING SuffixString(UINT n);
+VOID JudgeResult(PWORLD wld);
+VOID RunWorld(PWORLD wld);
+BOOL ReplaceExtension(CONST_STRING source, STRING replaced, CONST_STRING extension);
+BOOL GetAssemblyFilePath(CONST_STRING source, STRING destination);
+BOOL GetLogFilePath(CONST_STRING source, STRING destination);
+BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST_STRING path);
+VOID PrintHelp();
+VOID ParseCommandLine(INT argc, CONST_STRING * argv);
+
+VOID * NativeMalloc(UINT size)
+{
+    VOID * tmp;
+    
+    tmp = malloc(size);
+    if (tmp)
+        memset(tmp, 0, size);
+
+    return tmp;
+}
+
+VOID * NativeRealloc(VOID * ptr, UINT size)
+{
+    return realloc(ptr, size);
+}
+
+VOID NativeFree(VOID * ptr)
+{
+    free(ptr);
+}
+
+UINT Random()
+{
+    static UINT X = 0;
+    X = (X * 1664525 + 1013904223) & 2147483647;
+    return X >> 16;
+}
+
+BYTE RandomInstruction()
+{
+    return Random() % INSTRUCTION_NUMBER;
+}
+
 PPROGRAM_QUEUE CreateProgramQueue(UINT size)
 {
     PPROGRAM_QUEUE pgmq = (PPROGRAM_QUEUE)NativeMalloc(sizeof(PROGRAM_QUEUE));
@@ -128,44 +261,29 @@ VOID ReleaseProgramQueue(PPROGRAM_QUEUE pgmq)
     }
 }
 
-typedef struct Owner_
+CONST_STRING OwnerName(POWNER_TABLE owntbl, UINT owner)
 {
-    CHAR name[MAX_PATH];
-} Owner, * POwner;
-
-typedef struct OwnerTable_
-{
-    UINT   size;
-    POwner data;
-} OwnerTable, * POwnerTable;
-
-typedef struct WORLD_
-{
-    UINT            size;
-    PMEMORY         memory;
-    PPROGRAM_QUEUE  pgmq;
-    UINT            iteration_number;
-    OwnerTable      owntbl;
-} WORLD, * PWORLD;
-
-CONST_STRING GetOwnerName(PWORLD wld, UINT owner)
-{
-    return wld->owntbl.data[owner - USER].name;
+    return owntbl->data[owner - USER].name;
 }
 
-PMEMORY GetMemory(PWORLD wld, UINT addr)
+PBYTE MemoryData(PMEMORY mem, UINT addr)
 {
-    return wld->memory + addr;
+    return mem->data + addr;
 }
 
-VOID InitMemory(PWORLD wld, UINT addr, UINT size)
+PBYTE MemoryOwner(PMEMORY mem, UINT addr)
 {
-    memset(GetMemory(wld, addr), 0, sizeof(MEMORY) * size);
+    return mem->owner + addr;
+}
+
+VOID InitMemory(PMEMORY mem, UINT addr, UINT size)
+{
+    memset(MemoryData(mem, addr), 0, sizeof(MEMORY) * size);
 }
 
 VOID ReleaseOldestProgram(PWORLD wld, PPROGRAM_QUEUE pgmq)
 {
-    InitMemory(wld, pgmq->data[pgmq->cur].addr, pgmq->data[pgmq->cur].size);
+    InitMemory(wld->mem, pgmq->data[pgmq->cur].addr, pgmq->data[pgmq->cur].size);
     memset(&pgmq->data[pgmq->cur], 0, sizeof(PROGRAM));
     ++pgmq->cur;
     if (pgmq->cur == pgmq->size)
@@ -180,14 +298,14 @@ UINT MemoryAllocate(PWORLD wld, UINT size)
     {
         while (i < wld->size)
         {
-            if (GetMemory(wld, i)->owner == SYSTEM)
+            if (*MemoryOwner(wld->mem, i) == SYSTEM)
             {
                 tmp = 1;
-                while (tmp < size && i + tmp < wld->size && GetMemory(wld, i + tmp)->owner == SYSTEM)
+                while (tmp < size && i + tmp < wld->size && *MemoryOwner(wld->mem, i + tmp) == SYSTEM)
                     ++tmp;
                 if (tmp == size)
                 {
-                    InitMemory(wld, i, size);
+                    InitMemory(wld->mem, i, size);
                     return i;
                 }
                 i += tmp;
@@ -203,7 +321,7 @@ UINT MemoryAllocate(PWORLD wld, UINT size)
     return NULL;
 }
 
-VOID InitProgram(PPROGRAM pgm, PWORLD wld, BYTE owner, PUINT data, UINT size)
+VOID InitProgram(PPROGRAM pgm, PWORLD wld, BYTE owner, PBYTE data, UINT size)
 {
     UINT i;
 
@@ -212,25 +330,80 @@ VOID InitProgram(PPROGRAM pgm, PWORLD wld, BYTE owner, PUINT data, UINT size)
     pgm->addr = MemoryAllocate(wld, size);
     for (i = 0; i < size; ++i)
     {
-        GetMemory(wld, pgm->addr)->data = data[i];
+        *MemoryData(wld->mem, pgm->addr) = data[i];
     }
     pgm->ptr = pgm->addr;
 }
 
-typedef struct WORLD_PARAM_
+PMEMORY CreateMemory(UINT size)
 {
-    UINT world_size;
-    UINT program_number;
-    UINT iteration_number;
-} WORLD_PARAM, * PWORLD_PARAM;
+    PMEMORY mem;
+
+    mem = (PMEMORY)NativeMalloc(sizeof(MEMORY) * size);
+    if (!mem)
+        goto error;
+
+    mem->size = size;
+    
+    mem->data = (PBYTE)NativeMalloc(sizeof(BYTE) * size);
+    if (!mem->data)
+        goto error;
+
+    mem->owner = (PBYTE)NativeMalloc(sizeof(BYTE) * size);
+    if (!mem->owner)
+        goto error;
+
+    return mem;
+
+error:
+    ReleaseMemory(mem);
+    return NULL;
+}
+
+VOID ReleaseMemory(PMEMORY mem)
+{
+    if (mem)
+    {
+        NativeFree(mem->data);
+        NativeFree(mem->owner);
+    }
+}
+
+POWNER_TABLE CreateOwnerTable(UINT size)
+{
+    POWNER_TABLE owntbl;
+    
+    owntbl = (POWNER_TABLE)NativeMalloc(sizeof(OWNER_TABLE));
+    if (!owntbl)
+        goto error;
+
+    owntbl->size = size;
+    owntbl->data = (POWNER)NativeMalloc(sizeof(OWNER));
+    if (!owntbl->data)
+        goto error;
+
+    return owntbl;
+
+error:
+    ReleaseOwnerTable(owntbl);
+    return NULL;
+}
+
+VOID ReleaseOwnerTable(POWNER_TABLE owntbl)
+{
+    if (owntbl)
+    {
+        NativeFree(owntbl->data);
+    }
+}
 
 PWORLD CreateWorld(PWORLD_PARAM param)
 {
     PWORLD wld = (PWORLD)NativeMalloc(sizeof(WORLD));
-    wld->size = param->world_size;
-    wld->memory = (PMEMORY)NativeMalloc(param->world_size * sizeof(MEMORY));
+    wld->mem = CreateMemory(param->memory_size);
     wld->pgmq = CreateProgramQueue(param->program_number);
     wld->iteration_number = param->iteration_number;
+    wld->owntbl = CreateOwnerTable(param->owner_number);
     return wld;
 }
 
@@ -238,25 +411,26 @@ VOID ReleaseWorld(PWORLD wld)
 {
     if (wld)
     {
-        NativeFree(wld->memory);
+        ReleaseMemory(wld->mem);
         ReleaseProgramQueue(wld->pgmq);
+        ReleaseOwnerTable(wld->owntbl);
         NativeFree(wld);
     }
 }
 
-VOID WriteMemory(PWORLD wld, PPROGRAM pgm, UINT addr, UINT data)
+VOID WriteMemory(PMEMORY mem, PPROGRAM pgm, UINT addr, BYTE data)
 {
-    if (wld->size >= addr)
+    if (mem->size >= addr)
         return;
-    if (pgm->owner == GetMemory(wld, addr)->owner)
-        GetMemory(wld, addr)->data = data;
+    if (pgm->owner == *MemoryOwner(mem, addr))
+        *MemoryData(mem, addr) = data;
 }
 
-UINT ReadMemory(PWORLD wld, PPROGRAM pgm, UINT addr)
+BYTE ReadMemory(PMEMORY mem, PPROGRAM pgm, UINT addr)
 {
-    if (wld->size >= addr)
+    if (mem->size >= addr)
         return NOP;
-    return GetMemory(wld, addr)->data;
+    return *MemoryData(mem, addr);
 }
 
 BOOL OutOfMemory(PWORLD wld, UINT addr)
@@ -284,108 +458,108 @@ VOID DecreceProgramCounter(PPROGRAM pgm)
         --pgm->pc;
 }
 
-VOID NOP_(PWORLD wld, PPROGRAM pgm)
+VOID NOP_(PMEMORY mem, PPROGRAM pgm)
 {
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID NEXT_(PWORLD wld, PPROGRAM pgm)
+VOID NEXT_(PMEMORY mem, PPROGRAM pgm)
 {
     pgm->ptr += pgm->rgst;
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID PREV_(PWORLD wld, PPROGRAM pgm)
+VOID PREV_(PMEMORY mem, PPROGRAM pgm)
 {
     pgm->ptr -= pgm->rgst;
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID ADD_(PWORLD wld, PPROGRAM pgm)
+VOID ADD_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst += ReadMemory(wld, pgm, pgm->ptr);
+    pgm->rgst += ReadMemory(mem, pgm, pgm->ptr);
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID SUB_(PWORLD wld, PPROGRAM pgm)
+VOID SUB_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst -= ReadMemory(wld, pgm, pgm->ptr);
+    pgm->rgst -= ReadMemory(mem, pgm, pgm->ptr);
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID AND_(PWORLD wld, PPROGRAM pgm)
+VOID AND_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst &= ReadMemory(wld, pgm, pgm->ptr);
+    pgm->rgst &= ReadMemory(mem, pgm, pgm->ptr);
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID OR_(PWORLD wld, PPROGRAM pgm)
+VOID OR_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst |= ReadMemory(wld, pgm, pgm->ptr);
+    pgm->rgst |= ReadMemory(mem, pgm, pgm->ptr);
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID XOR_(PWORLD wld, PPROGRAM pgm)
+VOID XOR_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst ^= ReadMemory(wld, pgm, pgm->ptr);
+    pgm->rgst ^= ReadMemory(mem, pgm, pgm->ptr);
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID NOT_(PWORLD wld, PPROGRAM pgm)
+VOID NOT_(PMEMORY mem, PPROGRAM pgm)
 {
     pgm->rgst = (pgm->rgst != 0) ? 0 : ~0;
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID SLA_(PWORLD wld, PPROGRAM pgm)
+VOID SLA_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst <<= ReadMemory(wld, pgm, pgm->ptr);
+    pgm->rgst <<= ReadMemory(mem, pgm, pgm->ptr);
     pgm->rgst &= ~1;
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID SRA_(PWORLD wld, PPROGRAM pgm)
+VOID SRA_(PMEMORY mem, PPROGRAM pgm)
 {
     UINT msb;
-    msb = ReadMemory(wld, pgm, pgm->ptr) & 0x80000000;
-    pgm->rgst >>= ReadMemory(wld, pgm, pgm->ptr);
+    msb = ReadMemory(mem, pgm, pgm->ptr) & 0x80000000;
+    pgm->rgst >>= ReadMemory(mem, pgm, pgm->ptr);
     pgm->rgst |= msb;
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID SLL_(PWORLD wld, PPROGRAM pgm)
+VOID SLL_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst <<= ReadMemory(wld, pgm, pgm->ptr);
+    pgm->rgst <<= ReadMemory(mem, pgm, pgm->ptr);
     pgm->rgst &= 0x8FFFFFFF;
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID SRL_(PWORLD wld, PPROGRAM pgm)
+VOID SRL_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst >>= ReadMemory(wld, pgm, pgm->ptr);
+    pgm->rgst >>= ReadMemory(mem, pgm, pgm->ptr);
     pgm->rgst &= ~1;
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID READ_(PWORLD wld, PPROGRAM pgm)
+VOID READ_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst = ReadMemory(wld, pgm, pgm->ptr);
+    pgm->rgst = ReadMemory(mem, pgm, pgm->ptr);
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID WRITE_(PWORLD wld, PPROGRAM pgm)
+VOID WRITE_(PMEMORY mem, PPROGRAM pgm)
 {
-    WriteMemory(wld, pgm, pgm->ptr, pgm->rgst);
+    WriteMemory(mem, pgm, pgm->ptr, pgm->rgst);
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID SAVE_(PWORLD wld, PPROGRAM pgm)
+VOID SAVE_(PMEMORY mem, PPROGRAM pgm)
 {
     pgm->tmp = pgm->rgst;
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID SWAP_(PWORLD wld, PPROGRAM pgm)
+VOID SWAP_(PMEMORY mem, PPROGRAM pgm)
 {
     UINT tmp;
     tmp = pgm->tmp;
@@ -394,73 +568,64 @@ VOID SWAP_(PWORLD wld, PPROGRAM pgm)
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID SET_(PWORLD wld, PPROGRAM pgm)
+VOID SET_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst = ReadMemory(wld, pgm, pgm->pc + 1);
+    pgm->rgst = ReadMemory(mem, pgm, pgm->pc + 1);
     IncreceProgramCounter(pgm, 2);
 }
 
-VOID JMP_(PWORLD wld, PPROGRAM pgm)
+VOID JMP_(PMEMORY mem, PPROGRAM pgm)
 {
     pgm->pc = pgm->rgst;
     RoundProgramCounter(pgm);
 }
 
-VOID JEZ_(PWORLD wld, PPROGRAM pgm)
+VOID JEZ_(PMEMORY mem, PPROGRAM pgm)
 {
     if (pgm->tmp == 0)
         pgm->pc = pgm->rgst;
     RoundProgramCounter(pgm);
 }
 
-VOID PUSH_(PWORLD wld, PPROGRAM pgm)
+VOID PUSH_(PMEMORY mem, PPROGRAM pgm)
 {
     --pgm->sp;
-    WriteMemory(wld, pgm, pgm->sp, pgm->rgst);
+    WriteMemory(mem, pgm, pgm->sp, pgm->rgst);
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID POP_(PWORLD wld, PPROGRAM pgm)
+VOID POP_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst = ReadMemory(wld, pgm, pgm->sp);
+    pgm->rgst = ReadMemory(mem, pgm, pgm->sp);
     ++pgm->sp;
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID CALL_(PWORLD wld, PPROGRAM pgm)
+VOID CALL_(PMEMORY mem, PPROGRAM pgm)
 {
     if (pgm->pc + 1 >= pgm->size)
         return;
     --pgm->sp;
-    WriteMemory(wld, pgm, pgm->sp, pgm->pc + 2);
-    pgm->pc = ReadMemory(wld, pgm, pgm->pc + 1);
+    WriteMemory(mem, pgm, pgm->sp, pgm->pc + 2);
+    pgm->pc = ReadMemory(mem, pgm, pgm->pc + 1);
 }
 
-VOID RET_(PWORLD wld, PPROGRAM pgm)
+VOID RET_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->pc = ReadMemory(wld, pgm, pgm->sp);
+    pgm->pc = ReadMemory(mem, pgm, pgm->sp);
     ++pgm->sp;
     RoundProgramCounter(pgm);
 }
 
-VOID PREPARE_(PWORLD wld, PPROGRAM pgm)
+VOID PREPARE_(PMEMORY mem, PPROGRAM pgm)
 {
     IncreceProgramCounter(pgm, 1);
 }
 
-VOID MALLOC_(PWORLD wld, PPROGRAM pgm)
+VOID MALLOC_(PMEMORY mem, PPROGRAM pgm)
 {
     IncreceProgramCounter(pgm, 1);
 }
-
-typedef VOID(*INSTRUCTION_IMPL)(PWORLD wld, PPROGRAM pgm);
-
-typedef struct INSTRUCTION_INFO_
-{
-    CHAR             mnemonic[32];
-    UINT             code;
-    INSTRUCTION_IMPL impl;
-} INSTRUCTION_INFO, * PINSTRUCTION_INFO;
 
 #define DECLARE_INSTRUCTION_INFO(s) {TO_STRING(s), s, s##_}
 INSTRUCTION_INFO instruction_info_table[] = {
@@ -493,12 +658,12 @@ INSTRUCTION_INFO instruction_info_table[] = {
 };
 #undef DECLARE_INSTRUCTION_INFO
 
-CONST_STRING CodeToMnemonic(UINT code)
+CONST_STRING CodeToMnemonic(BYTE code)
 {
     return instruction_info_table[code].mnemonic;
 }
 
-UINT MnemonicToCode(CONST_STRING mnemonic)
+BYTE MnemonicToCode(CONST_STRING mnemonic)
 {
     UINT i;
     for (i = 0; i < sizeof(instruction_info_table) / sizeof(*instruction_info_table); ++i)
@@ -507,7 +672,7 @@ UINT MnemonicToCode(CONST_STRING mnemonic)
     return -1;
 }
 
-INSTRUCTION_IMPL CodeToImpl(UINT code)
+INSTRUCTION_IMPL CodeToImpl(BYTE code)
 {
     return instruction_info_table[code].impl;
 }
@@ -560,33 +725,50 @@ BOOL StringToUint(CONST_STRING s, PUINT value)
     }
 }
 
-#define TEMP_PAGE_SIZE 1024
-
-typedef struct TEMP_PAGE_
+VOID WriteUInt(PBYTE destination, UINT value)
 {
-    UINT data[TEMP_PAGE_SIZE];
-    TEMP_PAGE_ * next;
-} TEMP_PAGE, * PTEMP_PAGE;
+    UINT i;
+    for (i = 0; i < sizeof(UINT); ++i)
+        destination[i] = ((value >> (8 * i)) & 0xff);
+}
 
-typedef struct ASSEMBLY_
+UINT ReadUInt(PBYTE destination)
 {
-    UINT  size;
-    PUINT data;
-} ASSEMBLY, * PASSEMBLY;
+    UINT i, value;
+    value = 0;
+    for (i = 0; i < sizeof(UINT); ++i)
+        value |= destination[i] << (8 * (sizeof(UINT) - 1 - i));
+    return value;
+}
 
+BOOL ReserveAssembly(PASSEMBLY asm_, UINT size)
+{
+    if (asm_->size + size <= asm_->maxsize)
+        return TRUE;
+
+    asm_->data = (PBYTE)NativeRealloc(asm_->data, asm_->maxsize * 2);
+    asm_->maxsize *= 2;
+
+    if (!asm_->data)
+        return FALSE;
+
+    return TRUE;
+}
+
+#define DEFAULT_ASSEMBLY_SIZE 1024
 #define LINE_LENGTH_FORMAT 1024
 #define LINE_LENGTH (LINE_LENGTH_FORMAT + 1)
 PASSEMBLY CreateAssemblyFromFile(CONST_STRING file)
 {
+    printf("file=%s\n", file);
     PASSEMBLY asm_;
-    PTEMP_PAGE toppage, curpage, tmppage;
     FILE * fp;
-    UINT pagepos, bufpos, data;
     CHAR mnemonic[LINE_LENGTH];
+    BYTE code;
+    UINT value;
     BOOL valid;
 
     valid = FALSE;
-    toppage = NULL;
 
     fp = fopen(file, "rb");
     if (!fp)
@@ -596,67 +778,41 @@ PASSEMBLY CreateAssemblyFromFile(CONST_STRING file)
     if (!asm_)
         goto cleanup;
 
-    curpage = toppage = (PTEMP_PAGE)NativeMalloc(sizeof(TEMP_PAGE));
-    if (!toppage)
+    asm_->data = (PBYTE)NativeMalloc(sizeof(BYTE) * DEFAULT_ASSEMBLY_SIZE);
+    asm_->maxsize = DEFAULT_ASSEMBLY_SIZE;
+    if (!asm_->data)
         goto cleanup;
     
-    pagepos = 0;
     while (TRUE)
     {
-        if (pagepos == TEMP_PAGE_SIZE)
-        {
-            curpage->next = (PTEMP_PAGE)NativeMalloc(sizeof(TEMP_PAGE));
-            if (!curpage->next)
-                goto cleanup;
-
-            curpage = curpage->next;
-            pagepos = 0;
-        }
-
-        if (fscanf(fp, "%" TO_STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9]%c*", mnemonic) == EOF)
+        if (fscanf(fp, "%" TO_STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9]%c*", mnemonic, &code) == EOF)
             break;
 
-        if (!StringToUint(mnemonic, &data))
+        if (StringToUint(mnemonic, &value))
         {
-            data = MnemonicToCode(mnemonic);
-            if (data == -1)
+            printf("value=%d\n", value);
+            if (!ReserveAssembly(asm_, asm_->size + sizeof(value)))
                 goto cleanup;
+            WriteUInt(&asm_->data[asm_->size], value);
+            asm_->size += sizeof(value);
         }
-
-        curpage->data[pagepos] = data;
-
-        ++pagepos;
-        ++asm_->size;
-    }
-
-    asm_->data = (PUINT)NativeMalloc(sizeof(PUINT) * asm_->size);
-    curpage = toppage;
-    bufpos = pagepos = 0;
-    for (bufpos = 0; bufpos < asm_->size; ++bufpos)
-    {
-        if (pagepos == TEMP_PAGE_SIZE)
+        else
         {
-            curpage = curpage->next;
-            pagepos = 0;
+            code = MnemonicToCode(mnemonic);
+            if (code == -1)
+                goto cleanup;
+            printf("code=%d\n", code);
+            if (!ReserveAssembly(asm_, asm_->size + sizeof(code)))
+                goto cleanup;
+            asm_->data[asm_->size] = code;
+            asm_->size += sizeof(code);
         }
-        asm_->data[bufpos] = curpage->data[pagepos];
-        ++pagepos;
     }
+
     valid = TRUE;
 
 cleanup:
     fclose(fp);
-
-    if (toppage)
-    {
-        curpage = toppage;
-        while (curpage)
-        {
-            tmppage = curpage->next;
-            NativeFree(curpage);
-            curpage = tmppage;
-        }
-    }
 
     if (!valid)
     {
@@ -682,44 +838,34 @@ VOID ReleaseAssembly(PASSEMBLY asm_)
     }
 }
 
-VOID DeployAssembly(PWORLD wld, PASSEMBLY asm_, UINT owner)
+VOID DeployAssembly(PMEMORY mem, PASSEMBLY asm_, UINT owner)
 {
     UINT i;
 
     for (i = 0; i < asm_->size; ++i)
     {
-        wld->memory[i].data = asm_->data[i];
-        wld->memory[i].owner = owner;
+        *MemoryData(mem, i) = asm_->data[i];
+        *MemoryOwner(mem, i) = owner;
     }
 }
 
-VOID Step(PWORLD wld, PPROGRAM pgm)
+VOID Step(PMEMORY mem, PPROGRAM pgm)
 {
     UINT code;
-    code = GetMemory(wld, pgm->pc)->data;
+    code = *MemoryData(mem, pgm->pc);
     if (code < INSTRUCTION_NUMBER)
-        CodeToImpl(code)(wld, pgm);
+        CodeToImpl(code)(mem, pgm);
 }
 
-VOID Tick(PWORLD wld)
+VOID Tick(PMEMORY mem, PPROGRAM_QUEUE pgmq)
 {
     UINT i;
-    for (i = 0; i < wld->pgmq->size; ++i)
-    {
-        if (wld->pgmq->data[i].owner != SYSTEM)
-        {
-            Step(wld, &wld->pgmq->data[i]);
-        }
-    }
+    for (i = 0; i < pgmq->size; ++i)
+        if (pgmq->data[i].owner != SYSTEM)
+            Step(mem, &pgmq->data[i]);
 }
 
-typedef struct SCORE_WONER_PAIR_
-{
-    UINT score;
-    UINT owner;
-} SCORE_OWNER_PAIR, * PSCORE_OWNER_PAIR;
-
-int ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b)
+INT ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b)
 {
     return ((PSCORE_OWNER_PAIR)b)->score - ((PSCORE_OWNER_PAIR)a)->score;
 }
@@ -748,56 +894,66 @@ CONST_STRING SuffixString(UINT n)
     return "th";
 }
 
-VOID Judge(PWORLD wld)
+VOID JudgeResult(PWORLD wld)
 {
     UINT i;
     PSCORE_OWNER_PAIR pairs;
     
-    pairs = (PSCORE_OWNER_PAIR)NativeMalloc(wld->owntbl.size * sizeof(SCORE_OWNER_PAIR));
+    pairs = (PSCORE_OWNER_PAIR)NativeMalloc(wld->owntbl->size * sizeof(SCORE_OWNER_PAIR));
 
-    for (i = 0; i < wld->owntbl.size; ++i)
+    for (i = 0; i < wld->owntbl->size; ++i)
         pairs[i].owner = i + USER;
 
     for (i = 0; i < wld->pgmq->size; ++i)
         if (wld->pgmq->data[i].owner != SYSTEM)
             pairs[wld->pgmq->data[i].owner - USER].score += wld->pgmq->data[i].size;
 
-    qsort(pairs, wld->owntbl.size, sizeof(SCORE_OWNER_PAIR), ScoreOwnerPairComparator);
+    qsort(pairs, wld->owntbl->size, sizeof(SCORE_OWNER_PAIR), ScoreOwnerPairComparator);
 
-    for (i = 0; i < wld->owntbl.size; ++i)
-        printf("%d%s %s (%d)\n", i + 1, SuffixString(i + 1), GetOwnerName(wld, pairs[i].owner), pairs[i].score);
+    for (i = 0; i < wld->owntbl->size; ++i)
+        printf("%d%s %s (%d)\n", i + 1, SuffixString(i + 1), OwnerName(wld->owntbl, pairs[i].owner), pairs[i].score);
 
     NativeFree(pairs);
 }
 
-VOID Run(PWORLD wld)
+VOID RunWorld(PWORLD wld)
 {
     UINT i;
     for (i = 0; i < wld->iteration_number; ++i)
-        Tick(wld);
+        Tick(wld->mem, wld->pgmq);
 }
 
-BOOL GetAssemblyFilePath(CONST_STRING path, CHAR * asmpath)
+BOOL ReplaceExtension(CONST_STRING source, STRING replaced, CONST_STRING extension)
 {
     CONST_STRING name, ext;
 
-    if (!path || !asmpath)
+    if (!source || !replaced)
         return FALSE;
 
-    name = strrchr(path, '\\');
-    ext = strrchr(path, '.');
+    name = strrchr(source, '\\');
+    ext = strrchr(source, '.');
 
     if ((!name && !ext) || (name && !ext) || (name && ext && ext < name))
     {
-        strcpy(asmpath, path);
-        strcat(asmpath, ".qs");
+        strcpy(replaced, source);
+        strcat(replaced, extension);
         return TRUE;
     }
 
-    strcpy(asmpath, path);
-    asmpath[ext - path] = '\0';
-    strcat(asmpath, ".qs");
+    strcpy(replaced, source);
+    replaced[ext - source] = '\0';
+    strcat(replaced, extension);
     return TRUE;
+}
+
+BOOL GetAssemblyFilePath(CONST_STRING source, STRING destination)
+{
+    return ReplaceExtension(source, destination, ".qs");
+}
+
+BOOL GetLogFilePath(CONST_STRING source, STRING destination)
+{
+    return ReplaceExtension(source, destination, ".log");
 }
 
 BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST_STRING path)
@@ -809,9 +965,10 @@ BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST_STRING path)
 
     fp = fopen(path, "wb");
     if (!fp)
-        return NULL;
+        return FALSE;
 
-    fwrite(asm_->data, sizeof(UINT), asm_->size, fp);
+    if (fwrite(asm_->data, sizeof(BYTE), asm_->size, fp) == asm_->size)
+        result = TRUE;
 
     fclose(fp);
 
@@ -823,7 +980,7 @@ VOID PrintHelp()
     fprintf(stdin, "");
 }
 
-VOID ParseCommandLine(int argc, CONST_STRING * argv)
+VOID ParseCommandLine(INT argc, CONST_STRING * argv)
 {
     UINT owner, owner_number;
     PASSEMBLY asm_;
@@ -859,21 +1016,21 @@ VOID ParseCommandLine(int argc, CONST_STRING * argv)
     owner_number = (argc - 1) / 2;
     for (owner = 0; owner < owner_number; ++owner)
     {
-        strcpy(wld->owntbl.data[owner].name, argv[owner_number * 2]);
+        strcpy(wld->owntbl->data[owner].name, argv[owner_number * 2]);
         asm_ = CreateAssemblyFromFile(argv[owner_number * 2 + 1]);
         if (asm_)
         {
-            DeployAssembly(wld, asm_, owner);
+            DeployAssembly(wld->mem, asm_, owner);
             ReleaseAssembly(asm_);
         }
     }
 
-    Run(wld);
-    Judge(wld);
+    RunWorld(wld);
+    JudgeResult(wld);
     ReleaseWorld(wld);
 }
 
-int main(int argc, CONST_STRING * argv)
+INT main(INT argc, CONST_STRING * argv)
 {
     ParseCommandLine(argc, argv);
     return 0;
