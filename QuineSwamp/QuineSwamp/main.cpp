@@ -169,60 +169,65 @@ VOID NativeFree(VOID * ptr);
 UINT Random();
 BYTE RandomInstruction();
 
-PPROGRAM_QUEUE CreateProgramQueue(UINT size);
-VOID ReleaseProgramQueue(PPROGRAM_QUEUE pgmq);
-CONST_STRING OwnerName(POWNER_TABLE owntbl, UINT owner);
+PPROGRAM_QUEUE ProgramQueue_Create(UINT size);
+VOID ProgramQueue_Release(PPROGRAM_QUEUE pgmq);
 
-PBYTE MemoryData(PMEMORY mem, UINT addr);
-PBYTE MemoryOwner(PMEMORY mem, UINT addr);
+VOID Program_Init(PPROGRAM pgm, PMEMORY mem, PPROGRAM_QUEUE pgmq, BYTE owner, PBYTE data, UINT size);
+VOID Program_RoundProgramCounter(PPROGRAM pgm);
+VOID Program_IncreceProgramCounter(PPROGRAM pgm, UINT cnt);
+VOID Program_DecreceProgramCounter(PPROGRAM pgm);
+VOID Program_Step(PPROGRAM pgm, PMEMORY mem);
+VOID Program_Tick(PPROGRAM_QUEUE pgmq, PMEMORY mem);
+VOID Program_Dump(PPROGRAM pgm);
 
-VOID InitMemory(PMEMORY mem, UINT addr, UINT size);
+PBYTE Memory_Data(PMEMORY mem, UINT addr);
+PBYTE Memory_Owner(PMEMORY mem, UINT addr);
+
+VOID Memory_Init(PMEMORY mem, UINT addr, UINT size);
 VOID ReleaseOldestProgram(PMEMORY mem, PPROGRAM_QUEUE pgmq);
-UINT MemoryAllocate(PMEMORY mem, PPROGRAM_QUEUE pgmq, UINT size);
-VOID InitProgram(PPROGRAM pgm, PMEMORY mem, PPROGRAM_QUEUE pgmq, BYTE owner, PBYTE data, UINT size);
+UINT Memory_Allocate(PMEMORY mem, PPROGRAM_QUEUE pgmq, UINT size);
 
-PMEMORY CreateMemory(UINT size);
-VOID ReleaseMemory(PMEMORY mem);
+PMEMORY Memory_Create(UINT size);
+VOID Memory_Release(PMEMORY mem);
 
-POWNER_TABLE CreateOwnerTable(UINT size);
-VOID ReleaseOwnerTable(POWNER_TABLE owntbl);
+POWNER_TABLE OwnerTable_Create(UINT size);
+VOID OwnerTable_Release(POWNER_TABLE owntbl);
+CONST_STRING OwnerTable_Name(POWNER_TABLE owntbl, UINT owner);
 
-PWORLD CreateWorld(PWORLD_PARAM param);
-VOID ReleaseWorld(PWORLD wld);
+PWORLD World_Create(PWORLD_PARAM param);
+VOID World_Release(PWORLD wld);
+VOID World_JudgeResult(PWORLD wld);
+VOID World_Run(PWORLD wld);
 
-VOID WriteMemory(PMEMORY mem, PPROGRAM pgm, UINT addr, BYTE data);
-BYTE ReadMemory(PMEMORY mem, PPROGRAM pgm, UINT addr);
-
-BOOL OutOfMemory(PMEMORY mem, UINT addr);
-VOID RoundProgramCounter(PPROGRAM pgm);
-VOID IncreceProgramCounter(PPROGRAM pgm, UINT cnt);
-VOID DecreceProgramCounter(PPROGRAM pgm);
+VOID Memory_Write(PMEMORY mem, PPROGRAM pgm, UINT addr, BYTE data);
+BYTE Memory_Read(PMEMORY mem, PPROGRAM pgm, UINT addr);
+BOOL Memory_OutOfMemory(PMEMORY mem, UINT addr);
 
 CONST_STRING CodeToMnemonic(BYTE code);
 BYTE MnemonicToCode(CONST_STRING mnemonic);
 INSTRUCTION_IMPL CodeToImpl(BYTE code);
 BOOL StringToUint(CONST_STRING s, PUINT value);
 
-VOID WriteUInt(PBYTE destination, UINT value);
 UINT ReadUInt(PBYTE destination);
-
-BOOL ReserveAssembly(PASSEMBLY asm_, UINT size);
-PASSEMBLY CreateAssemblyFromFile(CONST_STRING file);
-VOID ReleaseAssembly(PASSEMBLY asm_);
-VOID DeployAssembly(PMEMORY mem, PASSEMBLY asm_, UINT owner);
-
-VOID Step(PMEMORY mem, PPROGRAM pgm);
-VOID Tick(PMEMORY mem, PPROGRAM_QUEUE pgmq);
-
-INT ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b);
-VOID DumpProgram(PPROGRAM pgm);
-CONST_STRING SuffixString(UINT n);
-VOID JudgeResult(PWORLD wld);
-VOID RunWorld(PWORLD wld);
+VOID WriteUInt(PBYTE destination, UINT value);
 BOOL ReplaceExtension(CONST_STRING source, STRING replaced, CONST_STRING extension);
 BOOL GetAssemblyFilePath(CONST_STRING source, STRING destination);
 BOOL GetLogFilePath(CONST_STRING source, STRING destination);
-BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST_STRING path);
+
+BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size);
+PASSEMBLY Assembly_CreateFromFile(CONST_STRING file);
+VOID Assembly_Release(PASSEMBLY asm_);
+VOID Assembly_Deploy(PMEMORY mem, PASSEMBLY asm_, UINT owner);
+BOOL Assembly_CreateFile(PASSEMBLY asm_, CONST_STRING path);
+
+INT ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b);
+CONST_STRING SuffixString(UINT n);
+
+PSTRING_UINT_MAP StringUIntMap_Create();
+VOID StringUIntMap_Release(PSTRING_UINT_MAP suimap);
+BOOL StringUIntMap_Add(PSTRING_UINT_MAP suimap, CONST_STRING s, UINT ui);
+BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, CONST_STRING s, PUINT ui);
+
 VOID PrintHelp();
 VOID ParseCommandLine(INT argc, CONST_STRING * argv);
 
@@ -259,7 +264,7 @@ BYTE RandomInstruction()
     return Random() % INSTRUCTION_NUMBER;
 }
 
-PPROGRAM_QUEUE CreateProgramQueue(UINT size)
+PPROGRAM_QUEUE ProgramQueue_Create(UINT size)
 {
     PPROGRAM_QUEUE pgmq = (PPROGRAM_QUEUE)NativeMalloc(sizeof(PROGRAM_QUEUE));
     pgmq->size = size;
@@ -267,7 +272,7 @@ PPROGRAM_QUEUE CreateProgramQueue(UINT size)
     return pgmq;
 }
 
-VOID ReleaseProgramQueue(PPROGRAM_QUEUE pgmq)
+VOID ProgramQueue_Release(PPROGRAM_QUEUE pgmq)
 {
     if (pgmq)
     {
@@ -276,51 +281,109 @@ VOID ReleaseProgramQueue(PPROGRAM_QUEUE pgmq)
     }
 }
 
-CONST_STRING OwnerName(POWNER_TABLE owntbl, UINT owner)
+VOID Program_Init(PPROGRAM pgm, PMEMORY mem, PPROGRAM_QUEUE pgmq, BYTE owner, PBYTE data, UINT size)
 {
-    return owntbl->data[owner - USER].name;
+    UINT i;
+
+    pgm->owner = owner;
+    pgm->size = size;
+    pgm->addr = Memory_Allocate(mem, pgmq, size);
+    for (i = 0; i < size; ++i)
+    {
+        *Memory_Data(mem, pgm->addr) = data[i];
+    }
+    pgm->ptr = pgm->addr;
 }
 
-PBYTE MemoryData(PMEMORY mem, UINT addr)
+VOID Program_RoundProgramCounter(PPROGRAM pgm)
+{
+    if (pgm->addr + pgm->pc >= pgm->size)
+        pgm->pc = 0;
+}
+
+VOID Program_IncreceProgramCounter(PPROGRAM pgm, UINT cnt)
+{
+    pgm->pc += cnt;
+    Program_RoundProgramCounter(pgm);
+}
+
+VOID Program_DecreceProgramCounter(PPROGRAM pgm)
+{
+    if (pgm->pc == 0)
+        pgm->pc = 0;
+    else
+        --pgm->pc;
+}
+
+VOID Program_Step(PPROGRAM pgm, PMEMORY mem)
+{
+    UINT code;
+    code = *Memory_Data(mem, pgm->pc);
+    if (code < INSTRUCTION_NUMBER)
+        CodeToImpl(code)(mem, pgm);
+}
+
+VOID Program_Tick(PPROGRAM_QUEUE pgmq, PMEMORY mem)
+{
+    UINT i;
+    for (i = 0; i < pgmq->size; ++i)
+        if (pgmq->data[i].owner != SYSTEM)
+            Program_Step(&pgmq->data[i], mem);
+}
+
+VOID Program_Dump(PPROGRAM pgm)
+{
+    printf("pid  : %x\n", pgm->pid);
+    printf("addr : %x\n", pgm->addr);
+    printf("size : %x\n", pgm->size);
+    printf("pc   : %x\n", pgm->pc);
+    printf("sp   : %x\n", pgm->sp);
+    printf("ptr  : %x\n", pgm->ptr);
+    printf("rgst : %x\n", pgm->rgst);
+    printf("tmp  : %x\n", pgm->tmp);
+    printf("owner: %x\n", pgm->owner);
+}
+
+PBYTE Memory_Data(PMEMORY mem, UINT addr)
 {
     return mem->data + addr;
 }
 
-PBYTE MemoryOwner(PMEMORY mem, UINT addr)
+PBYTE Memory_Owner(PMEMORY mem, UINT addr)
 {
     return mem->owner + addr;
 }
 
-VOID InitMemory(PMEMORY mem, UINT addr, UINT size)
+VOID Memory_Init(PMEMORY mem, UINT addr, UINT size)
 {
-    memset(MemoryData(mem, addr), 0, sizeof(MEMORY) * size);
+    memset(Memory_Data(mem, addr), 0, sizeof(MEMORY) * size);
 }
 
 VOID ReleaseOldestProgram(PMEMORY mem, PPROGRAM_QUEUE pgmq)
 {
-    InitMemory(mem, pgmq->data[pgmq->cur].addr, pgmq->data[pgmq->cur].size);
+    Memory_Init(mem, pgmq->data[pgmq->cur].addr, pgmq->data[pgmq->cur].size);
     memset(&pgmq->data[pgmq->cur], 0, sizeof(PROGRAM));
     ++pgmq->cur;
     if (pgmq->cur == pgmq->size)
         pgmq->cur = 0;
 }
 
-UINT MemoryAllocate(PMEMORY mem, PPROGRAM_QUEUE pgmq, UINT size)
+UINT Memory_Allocate(PMEMORY mem, PPROGRAM_QUEUE pgmq, UINT size)
 {
     UINT i, tmp;
     i = 0;
     while (TRUE)
     {
-        while (!OutOfMemory(mem, i))
+        while (!Memory_OutOfMemory(mem, i))
         {
-            if (*MemoryOwner(mem, i) == SYSTEM)
+            if (*Memory_Owner(mem, i) == SYSTEM)
             {
                 tmp = 1;
-                while (tmp < size && !OutOfMemory(mem, i + tmp) && *MemoryOwner(mem, i + tmp) == SYSTEM)
+                while (tmp < size && !Memory_OutOfMemory(mem, i + tmp) && *Memory_Owner(mem, i + tmp) == SYSTEM)
                     ++tmp;
                 if (tmp == size)
                 {
-                    InitMemory(mem, i, size);
+                    Memory_Init(mem, i, size);
                     return i;
                 }
                 i += tmp;
@@ -336,21 +399,7 @@ UINT MemoryAllocate(PMEMORY mem, PPROGRAM_QUEUE pgmq, UINT size)
     return NULL;
 }
 
-VOID InitProgram(PPROGRAM pgm, PMEMORY mem, PPROGRAM_QUEUE pgmq, BYTE owner, PBYTE data, UINT size)
-{
-    UINT i;
-
-    pgm->owner = owner;
-    pgm->size = size;
-    pgm->addr = MemoryAllocate(mem, pgmq, size);
-    for (i = 0; i < size; ++i)
-    {
-        *MemoryData(mem, pgm->addr) = data[i];
-    }
-    pgm->ptr = pgm->addr;
-}
-
-PMEMORY CreateMemory(UINT size)
+PMEMORY Memory_Create(UINT size)
 {
     PMEMORY mem;
 
@@ -371,20 +420,21 @@ PMEMORY CreateMemory(UINT size)
     return mem;
 
 error:
-    ReleaseMemory(mem);
+    Memory_Release(mem);
     return NULL;
 }
 
-VOID ReleaseMemory(PMEMORY mem)
+VOID Memory_Release(PMEMORY mem)
 {
     if (mem)
     {
         NativeFree(mem->data);
         NativeFree(mem->owner);
+        NativeFree(mem);
     }
 }
 
-POWNER_TABLE CreateOwnerTable(UINT size)
+POWNER_TABLE OwnerTable_Create(UINT size)
 {
     POWNER_TABLE owntbl;
     
@@ -400,178 +450,193 @@ POWNER_TABLE CreateOwnerTable(UINT size)
     return owntbl;
 
 error:
-    ReleaseOwnerTable(owntbl);
+    OwnerTable_Release(owntbl);
     return NULL;
 }
 
-VOID ReleaseOwnerTable(POWNER_TABLE owntbl)
+VOID OwnerTable_Release(POWNER_TABLE owntbl)
 {
     if (owntbl)
     {
         NativeFree(owntbl->data);
+        NativeFree(owntbl);
     }
 }
 
-PWORLD CreateWorld(PWORLD_PARAM param)
+CONST_STRING OwnerTable_Name(POWNER_TABLE owntbl, UINT owner)
+{
+    return owntbl->data[owner - USER].name;
+}
+
+PWORLD World_Create(PWORLD_PARAM param)
 {
     PWORLD wld = (PWORLD)NativeMalloc(sizeof(WORLD));
-    wld->mem = CreateMemory(param->memory_size);
-    wld->pgmq = CreateProgramQueue(param->program_number);
+    wld->mem = Memory_Create(param->memory_size);
+    wld->pgmq = ProgramQueue_Create(param->program_number);
     wld->iteration_number = param->iteration_number;
-    wld->owntbl = CreateOwnerTable(param->owner_number);
+    wld->owntbl = OwnerTable_Create(param->owner_number);
     return wld;
 }
 
-VOID ReleaseWorld(PWORLD wld)
+VOID World_Release(PWORLD wld)
 {
     if (wld)
     {
-        ReleaseMemory(wld->mem);
-        ReleaseProgramQueue(wld->pgmq);
-        ReleaseOwnerTable(wld->owntbl);
+        Memory_Release(wld->mem);
+        ProgramQueue_Release(wld->pgmq);
+        OwnerTable_Release(wld->owntbl);
         NativeFree(wld);
     }
 }
 
-VOID WriteMemory(PMEMORY mem, PPROGRAM pgm, UINT addr, BYTE data)
+VOID World_JudgeResult(PWORLD wld)
+{
+    UINT i;
+    PSCORE_OWNER_PAIR pairs;
+
+    pairs = (PSCORE_OWNER_PAIR)NativeMalloc(wld->owntbl->size * sizeof(SCORE_OWNER_PAIR));
+
+    for (i = 0; i < wld->owntbl->size; ++i)
+        pairs[i].owner = i + USER;
+
+    for (i = 0; i < wld->pgmq->size; ++i)
+        if (wld->pgmq->data[i].owner != SYSTEM)
+            pairs[wld->pgmq->data[i].owner - USER].score += wld->pgmq->data[i].size;
+
+    qsort(pairs, wld->owntbl->size, sizeof(SCORE_OWNER_PAIR), ScoreOwnerPairComparator);
+
+    for (i = 0; i < wld->owntbl->size; ++i)
+        printf("%d%s %s (%d)\n", i + 1, SuffixString(i + 1), OwnerTable_Name(wld->owntbl, pairs[i].owner), pairs[i].score);
+
+    NativeFree(pairs);
+}
+
+VOID World_Run(PWORLD wld)
+{
+    UINT i;
+    for (i = 0; i < wld->iteration_number; ++i)
+        Program_Tick(wld->pgmq, wld->mem);
+}
+
+VOID Memory_Write(PMEMORY mem, PPROGRAM pgm, UINT addr, BYTE data)
 {
     if (mem->size >= addr)
         return;
-    if (pgm->owner == *MemoryOwner(mem, addr))
-        *MemoryData(mem, addr) = data;
+    if (pgm->owner == *Memory_Owner(mem, addr))
+        *Memory_Data(mem, addr) = data;
 }
 
-BYTE ReadMemory(PMEMORY mem, PPROGRAM pgm, UINT addr)
+BYTE Memory_Read(PMEMORY mem, PPROGRAM pgm, UINT addr)
 {
     if (mem->size >= addr)
         return NOP;
-    return *MemoryData(mem, addr);
+    return *Memory_Data(mem, addr);
 }
 
-BOOL OutOfMemory(PMEMORY mem, UINT addr)
+BOOL Memory_OutOfMemory(PMEMORY mem, UINT addr)
 {
     return mem->size >= addr;
 }
 
-VOID RoundProgramCounter(PPROGRAM pgm)
-{
-    if (pgm->addr + pgm->pc >= pgm->size)
-        pgm->pc = 0;
-}
-
-VOID IncreceProgramCounter(PPROGRAM pgm, UINT cnt)
-{
-    pgm->pc += cnt;
-    RoundProgramCounter(pgm);
-}
-
-VOID DecreceProgramCounter(PPROGRAM pgm)
-{
-    if (pgm->pc == 0)
-        pgm->pc = 0;
-    else
-        --pgm->pc;
-}
-
 VOID NOP_(PMEMORY mem, PPROGRAM pgm)
 {
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID NEXT_(PMEMORY mem, PPROGRAM pgm)
 {
     pgm->ptr += pgm->rgst;
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID PREV_(PMEMORY mem, PPROGRAM pgm)
 {
     pgm->ptr -= pgm->rgst;
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID ADD_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst += ReadMemory(mem, pgm, pgm->ptr);
-    IncreceProgramCounter(pgm, 1);
+    pgm->rgst += Memory_Read(mem, pgm, pgm->ptr);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID SUB_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst -= ReadMemory(mem, pgm, pgm->ptr);
-    IncreceProgramCounter(pgm, 1);
+    pgm->rgst -= Memory_Read(mem, pgm, pgm->ptr);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID AND_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst &= ReadMemory(mem, pgm, pgm->ptr);
-    IncreceProgramCounter(pgm, 1);
+    pgm->rgst &= Memory_Read(mem, pgm, pgm->ptr);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID OR_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst |= ReadMemory(mem, pgm, pgm->ptr);
-    IncreceProgramCounter(pgm, 1);
+    pgm->rgst |= Memory_Read(mem, pgm, pgm->ptr);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID XOR_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst ^= ReadMemory(mem, pgm, pgm->ptr);
-    IncreceProgramCounter(pgm, 1);
+    pgm->rgst ^= Memory_Read(mem, pgm, pgm->ptr);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID NOT_(PMEMORY mem, PPROGRAM pgm)
 {
     pgm->rgst = (pgm->rgst != 0) ? 0 : ~0;
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID SLA_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst <<= ReadMemory(mem, pgm, pgm->ptr);
+    pgm->rgst <<= Memory_Read(mem, pgm, pgm->ptr);
     pgm->rgst &= ~1;
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID SRA_(PMEMORY mem, PPROGRAM pgm)
 {
     UINT msb;
-    msb = ReadMemory(mem, pgm, pgm->ptr) & 0x80000000;
-    pgm->rgst >>= ReadMemory(mem, pgm, pgm->ptr);
+    msb = Memory_Read(mem, pgm, pgm->ptr) & 0x80000000;
+    pgm->rgst >>= Memory_Read(mem, pgm, pgm->ptr);
     pgm->rgst |= msb;
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID SLL_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst <<= ReadMemory(mem, pgm, pgm->ptr);
+    pgm->rgst <<= Memory_Read(mem, pgm, pgm->ptr);
     pgm->rgst &= 0x8FFFFFFF;
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID SRL_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst >>= ReadMemory(mem, pgm, pgm->ptr);
+    pgm->rgst >>= Memory_Read(mem, pgm, pgm->ptr);
     pgm->rgst &= ~1;
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID READ_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst = ReadMemory(mem, pgm, pgm->ptr);
-    IncreceProgramCounter(pgm, 1);
+    pgm->rgst = Memory_Read(mem, pgm, pgm->ptr);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID WRITE_(PMEMORY mem, PPROGRAM pgm)
 {
-    WriteMemory(mem, pgm, pgm->ptr, pgm->rgst);
-    IncreceProgramCounter(pgm, 1);
+    Memory_Write(mem, pgm, pgm->ptr, pgm->rgst);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID SAVE_(PMEMORY mem, PPROGRAM pgm)
 {
     pgm->tmp = pgm->rgst;
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID SWAP_(PMEMORY mem, PPROGRAM pgm)
@@ -580,40 +645,40 @@ VOID SWAP_(PMEMORY mem, PPROGRAM pgm)
     tmp = pgm->tmp;
     pgm->tmp = pgm->rgst;
     pgm->rgst = tmp;
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID SET_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst = ReadMemory(mem, pgm, pgm->pc + 1);
-    IncreceProgramCounter(pgm, 2);
+    pgm->rgst = Memory_Read(mem, pgm, pgm->pc + 1);
+    Program_IncreceProgramCounter(pgm, 2);
 }
 
 VOID JMP_(PMEMORY mem, PPROGRAM pgm)
 {
     pgm->pc = pgm->rgst;
-    RoundProgramCounter(pgm);
+    Program_RoundProgramCounter(pgm);
 }
 
 VOID JEZ_(PMEMORY mem, PPROGRAM pgm)
 {
     if (pgm->tmp == 0)
         pgm->pc = pgm->rgst;
-    RoundProgramCounter(pgm);
+    Program_RoundProgramCounter(pgm);
 }
 
 VOID PUSH_(PMEMORY mem, PPROGRAM pgm)
 {
     --pgm->sp;
-    WriteMemory(mem, pgm, pgm->sp, pgm->rgst);
-    IncreceProgramCounter(pgm, 1);
+    Memory_Write(mem, pgm, pgm->sp, pgm->rgst);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID POP_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->rgst = ReadMemory(mem, pgm, pgm->sp);
+    pgm->rgst = Memory_Read(mem, pgm, pgm->sp);
     ++pgm->sp;
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID CALL_(PMEMORY mem, PPROGRAM pgm)
@@ -621,25 +686,25 @@ VOID CALL_(PMEMORY mem, PPROGRAM pgm)
     if (pgm->pc + 1 >= pgm->size)
         return;
     --pgm->sp;
-    WriteMemory(mem, pgm, pgm->sp, pgm->pc + 2);
-    pgm->pc = ReadMemory(mem, pgm, pgm->pc + 1);
+    Memory_Write(mem, pgm, pgm->sp, pgm->pc + 2);
+    pgm->pc = Memory_Read(mem, pgm, pgm->pc + 1);
 }
 
 VOID RET_(PMEMORY mem, PPROGRAM pgm)
 {
-    pgm->pc = ReadMemory(mem, pgm, pgm->sp);
+    pgm->pc = Memory_Read(mem, pgm, pgm->sp);
     ++pgm->sp;
-    RoundProgramCounter(pgm);
+    Program_RoundProgramCounter(pgm);
 }
 
 VOID PREPARE_(PMEMORY mem, PPROGRAM pgm)
 {
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 VOID MALLOC_(PMEMORY mem, PPROGRAM pgm)
 {
-    IncreceProgramCounter(pgm, 1);
+    Program_IncreceProgramCounter(pgm, 1);
 }
 
 #define DECLARE_INSTRUCTION_INFO(s) {TO_STRING(s), s, s##_}
@@ -740,13 +805,6 @@ BOOL StringToUint(CONST_STRING s, PUINT value)
     }
 }
 
-VOID WriteUInt(PBYTE destination, UINT value)
-{
-    UINT i;
-    for (i = 0; i < sizeof(UINT); ++i)
-        destination[i] = ((value >> (8 * i)) & 0xff);
-}
-
 UINT ReadUInt(PBYTE destination)
 {
     UINT i, value;
@@ -756,186 +814,11 @@ UINT ReadUInt(PBYTE destination)
     return value;
 }
 
-BOOL ReserveAssembly(PASSEMBLY asm_, UINT size)
-{
-    if (asm_->size + size <= asm_->maxsize)
-        return TRUE;
-
-    asm_->data = (PBYTE)NativeRealloc(asm_->data, asm_->maxsize * 2);
-    asm_->maxsize *= 2;
-
-    if (!asm_->data)
-        return FALSE;
-
-    return TRUE;
-}
-
-#define DEFAULT_ASSEMBLY_SIZE 1024
-#define LINE_LENGTH_FORMAT 1024
-#define LINE_LENGTH (LINE_LENGTH_FORMAT + 1)
-PASSEMBLY CreateAssemblyFromFile(CONST_STRING file)
-{
-    printf("file=%s\n", file);
-    PASSEMBLY asm_;
-    FILE * fp;
-    CHAR mnemonic[LINE_LENGTH];
-    BYTE code;
-    UINT value;
-    BOOL valid;
-
-    valid = FALSE;
-
-    fp = fopen(file, "rb");
-    if (!fp)
-        return NULL;
-
-    asm_ = (PASSEMBLY)NativeMalloc(sizeof(ASSEMBLY));
-    if (!asm_)
-        goto cleanup;
-
-    asm_->data = (PBYTE)NativeMalloc(sizeof(BYTE) * DEFAULT_ASSEMBLY_SIZE);
-    asm_->maxsize = DEFAULT_ASSEMBLY_SIZE;
-    if (!asm_->data)
-        goto cleanup;
-    
-    while (TRUE)
-    {
-        if (fscanf(fp, "%" TO_STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9]%c*", mnemonic, &code) == EOF)
-            break;
-
-        if (StringToUint(mnemonic, &value))
-        {
-            printf("value=%d\n", value);
-            if (!ReserveAssembly(asm_, asm_->size + sizeof(value)))
-                goto cleanup;
-            WriteUInt(&asm_->data[asm_->size], value);
-            asm_->size += sizeof(value);
-        }
-        else
-        {
-            code = MnemonicToCode(mnemonic);
-            if (code == -1)
-                goto cleanup;
-            printf("code=%d\n", code);
-            if (!ReserveAssembly(asm_, asm_->size + sizeof(code)))
-                goto cleanup;
-            asm_->data[asm_->size] = code;
-            asm_->size += sizeof(code);
-        }
-    }
-
-    valid = TRUE;
-
-cleanup:
-    fclose(fp);
-
-    if (!valid)
-    {
-        if (asm_)
-        {
-            NativeFree(asm_->data);
-            NativeFree(asm_);
-        }
-        return NULL;
-    }
-
-    return asm_;
-}
-#undef LINE_LENGTH
-#undef LINE_LENGTH_FORMAT
-
-VOID ReleaseAssembly(PASSEMBLY asm_)
-{
-    if (asm_)
-    {
-        NativeFree(asm_->data);
-        NativeFree(asm_);
-    }
-}
-
-VOID DeployAssembly(PMEMORY mem, PASSEMBLY asm_, UINT owner)
+VOID WriteUInt(PBYTE destination, UINT value)
 {
     UINT i;
-
-    for (i = 0; i < asm_->size; ++i)
-    {
-        *MemoryData(mem, i) = asm_->data[i];
-        *MemoryOwner(mem, i) = owner;
-    }
-}
-
-VOID Step(PMEMORY mem, PPROGRAM pgm)
-{
-    UINT code;
-    code = *MemoryData(mem, pgm->pc);
-    if (code < INSTRUCTION_NUMBER)
-        CodeToImpl(code)(mem, pgm);
-}
-
-VOID Tick(PMEMORY mem, PPROGRAM_QUEUE pgmq)
-{
-    UINT i;
-    for (i = 0; i < pgmq->size; ++i)
-        if (pgmq->data[i].owner != SYSTEM)
-            Step(mem, &pgmq->data[i]);
-}
-
-INT ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b)
-{
-    return ((PSCORE_OWNER_PAIR)b)->score - ((PSCORE_OWNER_PAIR)a)->score;
-}
-
-VOID DumpProgram(PPROGRAM pgm)
-{
-    printf("pid  : %x\n", pgm->pid  );
-    printf("addr : %x\n", pgm->addr );
-    printf("size : %x\n", pgm->size );
-    printf("pc   : %x\n", pgm->pc   );
-    printf("sp   : %x\n", pgm->sp   );
-    printf("ptr  : %x\n", pgm->ptr  );
-    printf("rgst : %x\n", pgm->rgst );
-    printf("tmp  : %x\n", pgm->tmp  );
-    printf("owner: %x\n", pgm->owner);
-}
-
-CONST_STRING SuffixString(UINT n)
-{
-    if (n == 1)
-        return "st";
-    if (n == 2)
-        return "nd";
-    if (n == 3)
-        return "rd";
-    return "th";
-}
-
-VOID JudgeResult(PWORLD wld)
-{
-    UINT i;
-    PSCORE_OWNER_PAIR pairs;
-    
-    pairs = (PSCORE_OWNER_PAIR)NativeMalloc(wld->owntbl->size * sizeof(SCORE_OWNER_PAIR));
-
-    for (i = 0; i < wld->owntbl->size; ++i)
-        pairs[i].owner = i + USER;
-
-    for (i = 0; i < wld->pgmq->size; ++i)
-        if (wld->pgmq->data[i].owner != SYSTEM)
-            pairs[wld->pgmq->data[i].owner - USER].score += wld->pgmq->data[i].size;
-
-    qsort(pairs, wld->owntbl->size, sizeof(SCORE_OWNER_PAIR), ScoreOwnerPairComparator);
-
-    for (i = 0; i < wld->owntbl->size; ++i)
-        printf("%d%s %s (%d)\n", i + 1, SuffixString(i + 1), OwnerName(wld->owntbl, pairs[i].owner), pairs[i].score);
-
-    NativeFree(pairs);
-}
-
-VOID RunWorld(PWORLD wld)
-{
-    UINT i;
-    for (i = 0; i < wld->iteration_number; ++i)
-        Tick(wld->mem, wld->pgmq);
+    for (i = 0; i < sizeof(UINT); ++i)
+        destination[i] = ((value >> (8 * i)) & 0xff);
 }
 
 BOOL ReplaceExtension(CONST_STRING source, STRING replaced, CONST_STRING extension)
@@ -971,7 +854,113 @@ BOOL GetLogFilePath(CONST_STRING source, STRING destination)
     return ReplaceExtension(source, destination, ".log");
 }
 
-BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST_STRING path)
+BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size)
+{
+    if (asm_->size + size <= asm_->maxsize)
+        return TRUE;
+
+    asm_->data = (PBYTE)NativeRealloc(asm_->data, asm_->maxsize * 2);
+    asm_->maxsize *= 2;
+
+    if (!asm_->data)
+        return FALSE;
+
+    return TRUE;
+}
+
+#define DEFAULT_ASSEMBLY_SIZE 1024
+#define LINE_LENGTH_FORMAT 1024
+#define LINE_LENGTH (LINE_LENGTH_FORMAT + 1)
+PASSEMBLY Assembly_CreateFromFile(CONST_STRING file)
+{
+    printf("file=%s\n", file);
+    PASSEMBLY asm_;
+    FILE * fp;
+    CHAR mnemonic[LINE_LENGTH];
+    BYTE code;
+    UINT value;
+    BOOL valid;
+
+    valid = FALSE;
+
+    fp = fopen(file, "rb");
+    if (!fp)
+        return NULL;
+
+    asm_ = (PASSEMBLY)NativeMalloc(sizeof(ASSEMBLY));
+    if (!asm_)
+        goto cleanup;
+
+    asm_->data = (PBYTE)NativeMalloc(sizeof(BYTE) * DEFAULT_ASSEMBLY_SIZE);
+    asm_->maxsize = DEFAULT_ASSEMBLY_SIZE;
+    if (!asm_->data)
+        goto cleanup;
+    
+    while (TRUE)
+    {
+        if (fscanf(fp, "%" TO_STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9]%c*", mnemonic, &code) == EOF)
+            break;
+
+        if (StringToUint(mnemonic, &value))
+        {
+            if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
+                goto cleanup;
+            WriteUInt(&asm_->data[asm_->size], value);
+            asm_->size += sizeof(value);
+        }
+        else
+        {
+            code = MnemonicToCode(mnemonic);
+            if (code == -1)
+                goto cleanup;
+            if (!Assembly_Reserve(asm_, asm_->size + sizeof(code)))
+                goto cleanup;
+            asm_->data[asm_->size] = code;
+            asm_->size += sizeof(code);
+        }
+    }
+
+    valid = TRUE;
+
+cleanup:
+    fclose(fp);
+
+    if (!valid)
+    {
+        if (asm_)
+        {
+            NativeFree(asm_->data);
+            NativeFree(asm_);
+        }
+        return NULL;
+    }
+
+    return asm_;
+}
+#undef LINE_LENGTH
+#undef LINE_LENGTH_FORMAT
+
+VOID Assembly_Release(PASSEMBLY asm_)
+{
+    if (asm_)
+    {
+        NativeFree(asm_->data);
+        NativeFree(asm_);
+    }
+}
+
+VOID Assembly_Deploy(PMEMORY mem, PASSEMBLY asm_, UINT owner)
+{
+    UINT i;
+
+    for (i = 0; i < asm_->size; ++i)
+    {
+        *Memory_Data(mem, i) = asm_->data[i];
+        *Memory_Owner(mem, i) = owner;
+    }
+}
+
+BOOL Assembly_CreateFile(PASSEMBLY asm_, CONST_STRING path)
 {
     FILE * fp;
     BOOL result;
@@ -988,6 +977,80 @@ BOOL CreateAssemblyFile(PASSEMBLY asm_, CONST_STRING path)
     fclose(fp);
 
     return result;
+}
+
+INT ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b)
+{
+    return ((PSCORE_OWNER_PAIR)b)->score - ((PSCORE_OWNER_PAIR)a)->score;
+}
+
+CONST_STRING SuffixString(UINT n)
+{
+    if (n == 1)
+        return "st";
+    if (n == 2)
+        return "nd";
+    if (n == 3)
+        return "rd";
+    return "th";
+}
+
+#define STRING_UINT_MAP_DEFAULT_MAX_SIZE 256
+PSTRING_UINT_MAP StringUIntMap_Create()
+{
+    PSTRING_UINT_MAP suimap;
+
+    suimap = (PSTRING_UINT_MAP)NativeMalloc(sizeof(STRING_UINT_MAP));
+    if (!suimap)
+        return NULL;
+    
+    suimap->data = (PSTRING_UINT_PAIR)NativeMalloc(sizeof(STRING_UINT_PAIR) * STRING_UINT_MAP_DEFAULT_MAX_SIZE);
+    suimap->maxsize = STRING_UINT_MAP_DEFAULT_MAX_SIZE;
+
+    return suimap;
+
+error:
+    StringUIntMap_Release(suimap);
+}
+
+VOID StringUIntMap_Release(PSTRING_UINT_MAP suimap)
+{
+    if (suimap)
+    {
+        NativeFree(suimap->data);
+        NativeFree(suimap);
+    }
+}
+
+BOOL StringUIntMap_Add(PSTRING_UINT_MAP suimap, CONST_STRING s, UINT ui)
+{
+    if (suimap->size >= suimap->maxsize)
+    {
+        suimap->maxsize *= 2;
+        suimap->data = (PSTRING_UINT_PAIR)NativeRealloc(suimap->data, suimap->maxsize);
+        return FALSE;
+    }
+
+    strcpy(suimap->data[suimap->size].label, s);
+    suimap->data[suimap->size].addr = ui;
+    ++suimap->size;
+    return TRUE;
+}
+
+BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, CONST_STRING s, PUINT ui)
+{
+    UINT i;
+
+    for (i = 0; i < suimap->size; ++i)
+    {
+        if (stricmp(suimap->data[i].label, s) == 0)
+        {
+            *ui = suimap->data[i].addr;
+            return TRUE;
+        }
+    }
+
+    return FALSE;
 }
 
 VOID PrintHelp()
@@ -1012,12 +1075,12 @@ VOID ParseCommandLine(INT argc, CONST_STRING * argv)
 
     if (argc == 2)
     {
-        PASSEMBLY asm_ = CreateAssemblyFromFile(argv[1]);
+        PASSEMBLY asm_ = Assembly_CreateFromFile(argv[1]);
         if (asm_)
         {
             memset(asmpath, 0, sizeof(asmpath));
             if (GetAssemblyFilePath(argv[1], asmpath))
-                CreateAssemblyFile(asm_, asmpath);
+                Assembly_CreateFile(asm_, asmpath);
         }
         return;
     }
@@ -1028,51 +1091,23 @@ VOID ParseCommandLine(INT argc, CONST_STRING * argv)
         return;
     }
 
-    wld = CreateWorld(&param);
+    wld = World_Create(&param);
 
     owner_number = (argc - 1) / 2;
     for (owner = 0; owner < owner_number; ++owner)
     {
         strcpy(wld->owntbl->data[owner].name, argv[owner_number * 2]);
-        asm_ = CreateAssemblyFromFile(argv[owner_number * 2 + 1]);
+        asm_ = Assembly_CreateFromFile(argv[owner_number * 2 + 1]);
         if (asm_)
         {
-            DeployAssembly(wld->mem, asm_, owner);
-            ReleaseAssembly(asm_);
+            Assembly_Deploy(wld->mem, asm_, owner);
+            Assembly_Release(asm_);
         }
     }
 
-    RunWorld(wld);
-    JudgeResult(wld);
-    ReleaseWorld(wld);
-}
-
-PSTRING_UINT_MAP CreateStringUIntMap()
-{
-    PSTRING_UINT_MAP suimap;
-
-    suimap = (PSTRING_UINT_MAP)NativeMalloc(sizeof(STRING_UINT_MAP));
-    if (!suimap)
-        return NULL;
-    
-    //TODO
-
-    return suimap;
-}
-
-VOID ReleaseStringUIntMap(PSTRING_UINT_MAP suimap)
-{
-    //TODO
-}
-
-BOOL StringUIntMap_Add(CONST_STRING s, UINT ui)
-{
-    //TODO
-}
-
-UINT StringUIntMap_Find(CONST_STRING s)
-{
-    //TODO
+    World_Run(wld);
+    World_JudgeResult(wld);
+    World_Release(wld);
 }
 
 INT main(INT argc, CONST_STRING * argv)
