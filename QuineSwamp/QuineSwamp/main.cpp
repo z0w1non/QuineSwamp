@@ -207,6 +207,7 @@ CONST_STRING CodeToMnemonic(BYTE code);
 BYTE MnemonicToCode(CONST_STRING mnemonic);
 INSTRUCTION_IMPL CodeToImpl(BYTE code);
 BOOL StringToUint(CONST_STRING s, PUINT value);
+BOOL IsLabelDeclaration(CONST_STRING s);
 
 UINT ReadUInt(PBYTE destination);
 VOID WriteUInt(PBYTE destination, UINT value);
@@ -805,6 +806,14 @@ BOOL StringToUint(CONST_STRING s, PUINT value)
     }
 }
 
+BOOL IsLabelDeclaration(CONST_STRING s)
+{
+    if (*s != ':')
+        return FALSE;
+    for (++s; isalnum(*s); ++s);
+    return *s ? FALSE : TRUE;
+}
+
 UINT ReadUInt(PBYTE destination)
 {
     UINT i, value;
@@ -873,15 +882,17 @@ BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size)
 #define LINE_LENGTH (LINE_LENGTH_FORMAT + 1)
 PASSEMBLY Assembly_CreateFromFile(CONST_STRING file)
 {
-    printf("file=%s\n", file);
     PASSEMBLY asm_;
     FILE * fp;
-    CHAR mnemonic[LINE_LENGTH];
+    CHAR data[LINE_LENGTH];
     BYTE code;
     UINT value;
     BOOL valid;
+    PSTRING_UINT_MAP suimap;
 
     valid = FALSE;
+    asm_ = NULL;
+    suimap = NULL;
 
     fp = fopen(file, "rb");
     if (!fp)
@@ -895,13 +906,24 @@ PASSEMBLY Assembly_CreateFromFile(CONST_STRING file)
     asm_->maxsize = DEFAULT_ASSEMBLY_SIZE;
     if (!asm_->data)
         goto cleanup;
+
+    suimap = StringUIntMap_Create();
+    if (!suimap)
+        goto cleanup;
     
     while (TRUE)
     {
-        if (fscanf(fp, "%" TO_STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9]%c*", mnemonic, &code) == EOF)
+        if (fscanf(fp, "%" TO_STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9:]%c*", data, &code) == EOF)
             break;
 
-        if (StringToUint(mnemonic, &value))
+        if (IsLabelDeclaration(data))
+        {
+            if (StringUIntMap_Find(suimap, data + 1, NULL))
+                fprintf(stderr, "Already declared label %s\n", data + 1);
+            else
+                StringUIntMap_Add(suimap, data + 1, asm_->size);
+        }
+        else if (StringUIntMap_Find(suimap, data + 1, &value) || StringToUint(data, &value))
         {
             if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
                 goto cleanup;
@@ -910,7 +932,7 @@ PASSEMBLY Assembly_CreateFromFile(CONST_STRING file)
         }
         else
         {
-            code = MnemonicToCode(mnemonic);
+            code = MnemonicToCode(data);
             if (code == -1)
                 goto cleanup;
             if (!Assembly_Reserve(asm_, asm_->size + sizeof(code)))
@@ -924,6 +946,8 @@ PASSEMBLY Assembly_CreateFromFile(CONST_STRING file)
 
 cleanup:
     fclose(fp);
+
+    StringUIntMap_Release(suimap);
 
     if (!valid)
     {
@@ -939,6 +963,7 @@ cleanup:
 }
 #undef LINE_LENGTH
 #undef LINE_LENGTH_FORMAT
+#undef DEFAULT_ASSEMBLY_SIZE
 
 VOID Assembly_Release(PASSEMBLY asm_)
 {
@@ -1005,12 +1030,15 @@ PSTRING_UINT_MAP StringUIntMap_Create()
         return NULL;
     
     suimap->data = (PSTRING_UINT_PAIR)NativeMalloc(sizeof(STRING_UINT_PAIR) * STRING_UINT_MAP_DEFAULT_MAX_SIZE);
+    if (!suimap->data)
+        goto error;
     suimap->maxsize = STRING_UINT_MAP_DEFAULT_MAX_SIZE;
 
     return suimap;
 
 error:
     StringUIntMap_Release(suimap);
+    return NULL;
 }
 
 VOID StringUIntMap_Release(PSTRING_UINT_MAP suimap)
@@ -1045,7 +1073,8 @@ BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, CONST_STRING s, PUINT ui)
     {
         if (stricmp(suimap->data[i].label, s) == 0)
         {
-            *ui = suimap->data[i].addr;
+            if (ui)
+                *ui = suimap->data[i].addr;
             return TRUE;
         }
     }
