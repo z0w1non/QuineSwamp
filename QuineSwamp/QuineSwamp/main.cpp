@@ -921,7 +921,8 @@ PASSEMBLY Assembly_CreateFromFile(CONST_STRING file)
             if (StringUIntMap_Find(suimap, data + 1, NULL))
                 fprintf(stderr, "Already declared label %s\n", data + 1);
             else
-                StringUIntMap_Add(suimap, data + 1, asm_->size);
+                if (!StringUIntMap_Add(suimap, data + 1, asm_->size))
+                    goto cleanup;
         }
         else if (StringUIntMap_Find(suimap, data + 1, &value) || StringToUint(data, &value))
         {
