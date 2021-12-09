@@ -61,8 +61,8 @@ enum INSTRUCTION
 
 #define FORWARD_DECLARATION(type) struct type##_; typedef type##_ type, * P##type
     FORWARD_DECLARATION(MEMORY          );
-    FORWARD_DECLARATION(PROGRAM         );
-    FORWARD_DECLARATION(PROGRAM_QUEUE   );
+    FORWARD_DECLARATION(PROCESSOR       );
+    FORWARD_DECLARATION(PROCESSOR_QUEUE );
     FORWARD_DECLARATION(OWNER           );
     FORWARD_DECLARATION(OWNER_TABLE     );
     FORWARD_DECLARATION(WORLD           );
@@ -81,7 +81,7 @@ typedef struct MEMORY_
     PBYTE   owner;
 } MEMORY, * PMEMORY;
 
-typedef struct PROGRAM_
+typedef struct PROCESSOR_
 {
     UINT    pid;
     UINT    addr;
@@ -92,14 +92,14 @@ typedef struct PROGRAM_
     UINT    rgst;
     UINT    tmp;
     BYTE    owner;
-} PROGRAM, * PPROGRAM;
+} PROCESSOR, * PPROCESSOR;
 
-typedef struct PROGRAM_QUEUE_
+typedef struct PROCESSOR_QUEUE_
 {
-    UINT     size;
-    PPROGRAM data;
-    UINT     cur;
-} PROGRAM_QUEUE, * PPROGRAM_QUEUE;
+    UINT        size;
+    PPROCESSOR  data;
+    UINT        cur;
+} PROCESSOR_QUEUE, * PPROCESSOR_QUEUE;
 
 typedef struct OWNER_
 {
@@ -114,10 +114,10 @@ typedef struct OWNER_TABLE_
 
 typedef struct WORLD_
 {
-    PMEMORY         mem;
-    PPROGRAM_QUEUE  pgmq;
-    UINT            iteration_number;
-    POWNER_TABLE    owntbl;
+    PMEMORY             mem;
+    PPROCESSOR_QUEUE    prcsq;
+    UINT                iteration_number;
+    POWNER_TABLE        owntbl;
 } WORLD, * PWORLD;
 
 typedef struct WORLD_PARAM_
@@ -128,7 +128,7 @@ typedef struct WORLD_PARAM_
     UINT owner_number;
 } WORLD_PARAM, * PWORLD_PARAM;
 
-typedef VOID(*INSTRUCTION_IMPL)(PMEMORY mem, PPROGRAM pgm);
+typedef VOID(*INSTRUCTION_IMPL)(PMEMORY mem, PPROCESSOR prcs);
 
 typedef struct INSTRUCTION_INFO_
 {
@@ -169,23 +169,23 @@ VOID NativeFree(VOID * ptr);
 UINT Random();
 BYTE RandomInstruction();
 
-PPROGRAM_QUEUE ProgramQueue_Create(UINT size);
-VOID ProgramQueue_Release(PPROGRAM_QUEUE pgmq);
+PPROCESSOR_QUEUE ProcessorQueue_Create(UINT size);
+VOID ProcessorQueue_Release(PPROCESSOR_QUEUE prcsq);
 
-VOID Program_Init(PPROGRAM pgm, PMEMORY mem, PPROGRAM_QUEUE pgmq, BYTE owner, PBYTE data, UINT size);
-VOID Program_RoundProgramCounter(PPROGRAM pgm);
-VOID Program_IncreceProgramCounter(PPROGRAM pgm, UINT cnt);
-VOID Program_DecreceProgramCounter(PPROGRAM pgm);
-VOID Program_Step(PPROGRAM pgm, PMEMORY mem);
-VOID Program_Tick(PPROGRAM_QUEUE pgmq, PMEMORY mem);
-VOID Program_Dump(PPROGRAM pgm);
+VOID Processor_Init(PPROCESSOR prcs, PMEMORY mem, PPROCESSOR_QUEUE prcsq, BYTE owner, PBYTE data, UINT size);
+VOID Processor_RoundProgramCounter(PPROCESSOR prcs);
+VOID Processor_IncreceProgramCounter(PPROCESSOR prcs, UINT cnt);
+VOID Processor_DecreceProgramCounter(PPROCESSOR prcs);
+VOID Processor_Step(PPROCESSOR prcs, PMEMORY mem);
+VOID Processor_Tick(PPROCESSOR_QUEUE prcsq, PMEMORY mem);
+VOID Processor_Dump(PPROCESSOR prcs);
 
 PBYTE Memory_Data(PMEMORY mem, UINT addr);
 PBYTE Memory_Owner(PMEMORY mem, UINT addr);
 
 VOID Memory_Init(PMEMORY mem, UINT addr, UINT size);
-VOID ReleaseOldestProgram(PMEMORY mem, PPROGRAM_QUEUE pgmq);
-UINT Memory_Allocate(PMEMORY mem, PPROGRAM_QUEUE pgmq, UINT size);
+VOID ReleaseOldestProgram(PMEMORY mem, PPROCESSOR_QUEUE prcsq);
+UINT Memory_Allocate(PMEMORY mem, PPROCESSOR_QUEUE prcsq, UINT size);
 
 PMEMORY Memory_Create(UINT size);
 VOID Memory_Release(PMEMORY mem);
@@ -199,8 +199,8 @@ VOID World_Release(PWORLD wld);
 VOID World_JudgeResult(PWORLD wld);
 VOID World_Run(PWORLD wld);
 
-VOID Memory_Write(PMEMORY mem, PPROGRAM pgm, UINT addr, BYTE data);
-BYTE Memory_Read(PMEMORY mem, PPROGRAM pgm, UINT addr);
+VOID Memory_Write(PMEMORY mem, PPROCESSOR prcs, UINT addr, BYTE data);
+BYTE Memory_Read(PMEMORY mem, PPROCESSOR prcs, UINT addr);
 BOOL Memory_OutOfMemory(PMEMORY mem, UINT addr);
 
 CONST_STRING CodeToMnemonic(BYTE code);
@@ -264,84 +264,84 @@ BYTE RandomInstruction()
     return Random() % INSTRUCTION_NUMBER;
 }
 
-PPROGRAM_QUEUE ProgramQueue_Create(UINT size)
+PPROCESSOR_QUEUE ProcessorQueue_Create(UINT size)
 {
-    PPROGRAM_QUEUE pgmq = (PPROGRAM_QUEUE)NativeMalloc(sizeof(PROGRAM_QUEUE));
-    pgmq->size = size;
-    pgmq->data = (PPROGRAM)NativeMalloc(size * sizeof(PROGRAM));
-    return pgmq;
+    PPROCESSOR_QUEUE prcsq = (PPROCESSOR_QUEUE)NativeMalloc(sizeof(PROCESSOR_QUEUE));
+    prcsq->size = size;
+    prcsq->data = (PPROCESSOR)NativeMalloc(size * sizeof(PROCESSOR));
+    return prcsq;
 }
 
-VOID ProgramQueue_Release(PPROGRAM_QUEUE pgmq)
+VOID ProcessorQueue_Release(PPROCESSOR_QUEUE prcsq)
 {
-    if (pgmq)
+    if (prcsq)
     {
-        NativeFree(pgmq->data);
-        NativeFree(pgmq);
+        NativeFree(prcsq->data);
+        NativeFree(prcsq);
     }
 }
 
-VOID Program_Init(PPROGRAM pgm, PMEMORY mem, PPROGRAM_QUEUE pgmq, BYTE owner, PBYTE data, UINT size)
+VOID Processor_Init(PPROCESSOR prcs, PMEMORY mem, PPROCESSOR_QUEUE prcsq, BYTE owner, PBYTE data, UINT size)
 {
     UINT i;
 
-    pgm->owner = owner;
-    pgm->size = size;
-    pgm->addr = Memory_Allocate(mem, pgmq, size);
+    prcs->owner = owner;
+    prcs->size = size;
+    prcs->addr = Memory_Allocate(mem, prcsq, size);
     for (i = 0; i < size; ++i)
     {
-        *Memory_Data(mem, pgm->addr) = data[i];
+        *Memory_Data(mem, prcs->addr) = data[i];
     }
-    pgm->ptr = pgm->addr;
+    prcs->ptr = prcs->addr;
 }
 
-VOID Program_RoundProgramCounter(PPROGRAM pgm)
+VOID Processor_RoundProgramCounter(PPROCESSOR prcs)
 {
-    if (pgm->addr + pgm->pc >= pgm->size)
-        pgm->pc = 0;
+    if (prcs->addr + prcs->pc >= prcs->size)
+        prcs->pc = 0;
 }
 
-VOID Program_IncreceProgramCounter(PPROGRAM pgm, UINT cnt)
+VOID Processor_IncreceProgramCounter(PPROCESSOR prcs, UINT cnt)
 {
-    pgm->pc += cnt;
-    Program_RoundProgramCounter(pgm);
+    prcs->pc += cnt;
+    Processor_RoundProgramCounter(prcs);
 }
 
-VOID Program_DecreceProgramCounter(PPROGRAM pgm)
+VOID Processor_DecreceProgramCounter(PPROCESSOR prcs)
 {
-    if (pgm->pc == 0)
-        pgm->pc = 0;
+    if (prcs->pc == 0)
+        prcs->pc = 0;
     else
-        --pgm->pc;
+        --prcs->pc;
 }
 
-VOID Program_Step(PPROGRAM pgm, PMEMORY mem)
+VOID Processor_Step(PPROCESSOR prcs, PMEMORY mem)
 {
     UINT code;
-    code = *Memory_Data(mem, pgm->pc);
+    code = *Memory_Data(mem, prcs->pc);
     if (code < INSTRUCTION_NUMBER)
-        CodeToImpl(code)(mem, pgm);
+        CodeToImpl(code)(mem, prcs);
 }
 
-VOID Program_Tick(PPROGRAM_QUEUE pgmq, PMEMORY mem)
+VOID Processor_Tick(PPROCESSOR_QUEUE prcsq, PMEMORY mem)
 {
     UINT i;
-    for (i = 0; i < pgmq->size; ++i)
-        if (pgmq->data[i].owner != SYSTEM)
-            Program_Step(&pgmq->data[i], mem);
+    for (i = 0; i < prcsq->size; ++i)
+        if (prcsq->data[i].owner != SYSTEM)
+            Processor_Step(&prcsq->data[i], mem);
 }
 
-VOID Program_Dump(PPROGRAM pgm)
+VOID Processor_Dump(PPROCESSOR prcs)
 {
-    printf("pid  : %x\n", pgm->pid);
-    printf("addr : %x\n", pgm->addr);
-    printf("size : %x\n", pgm->size);
-    printf("pc   : %x\n", pgm->pc);
-    printf("sp   : %x\n", pgm->sp);
-    printf("ptr  : %x\n", pgm->ptr);
-    printf("rgst : %x\n", pgm->rgst);
-    printf("tmp  : %x\n", pgm->tmp);
-    printf("owner: %x\n", pgm->owner);
+    printf("pid  : %x\n", prcs->pid  );
+    printf("addr : %x\n", prcs->addr );
+    printf("size : %x\n", prcs->size );
+    printf("pc   : %x\n", prcs->pc   );
+    printf("sp   : %x\n", prcs->sp   );
+    printf("ptr  : %x\n", prcs->ptr  );
+    printf("rgst : %x\n", prcs->rgst );
+    printf("tmp  : %x\n", prcs->tmp  );
+    printf("owner: %x\n", prcs->owner);
 }
 
 PBYTE Memory_Data(PMEMORY mem, UINT addr)
@@ -359,16 +359,16 @@ VOID Memory_Init(PMEMORY mem, UINT addr, UINT size)
     memset(Memory_Data(mem, addr), 0, sizeof(MEMORY) * size);
 }
 
-VOID ReleaseOldestProgram(PMEMORY mem, PPROGRAM_QUEUE pgmq)
+VOID ReleaseOldestProgram(PMEMORY mem, PPROCESSOR_QUEUE prcsq)
 {
-    Memory_Init(mem, pgmq->data[pgmq->cur].addr, pgmq->data[pgmq->cur].size);
-    memset(&pgmq->data[pgmq->cur], 0, sizeof(PROGRAM));
-    ++pgmq->cur;
-    if (pgmq->cur == pgmq->size)
-        pgmq->cur = 0;
+    Memory_Init(mem, prcsq->data[prcsq->cur].addr, prcsq->data[prcsq->cur].size);
+    memset(&prcsq->data[prcsq->cur], 0, sizeof(PROCESSOR));
+    ++prcsq->cur;
+    if (prcsq->cur == prcsq->size)
+        prcsq->cur = 0;
 }
 
-UINT Memory_Allocate(PMEMORY mem, PPROGRAM_QUEUE pgmq, UINT size)
+UINT Memory_Allocate(PMEMORY mem, PPROCESSOR_QUEUE prcsq, UINT size)
 {
     UINT i, tmp;
     i = 0;
@@ -393,7 +393,7 @@ UINT Memory_Allocate(PMEMORY mem, PPROGRAM_QUEUE pgmq, UINT size)
                 ++i;
             }
         }
-        ReleaseOldestProgram(mem, pgmq);
+        ReleaseOldestProgram(mem, prcsq);
     }
 
     return NULL;
@@ -472,7 +472,7 @@ PWORLD World_Create(PWORLD_PARAM param)
 {
     PWORLD wld = (PWORLD)NativeMalloc(sizeof(WORLD));
     wld->mem = Memory_Create(param->memory_size);
-    wld->pgmq = ProgramQueue_Create(param->program_number);
+    wld->prcsq = ProcessorQueue_Create(param->program_number);
     wld->iteration_number = param->iteration_number;
     wld->owntbl = OwnerTable_Create(param->owner_number);
     return wld;
@@ -483,7 +483,7 @@ VOID World_Release(PWORLD wld)
     if (wld)
     {
         Memory_Release(wld->mem);
-        ProgramQueue_Release(wld->pgmq);
+        ProcessorQueue_Release(wld->prcsq);
         OwnerTable_Release(wld->owntbl);
         NativeFree(wld);
     }
@@ -499,9 +499,9 @@ VOID World_JudgeResult(PWORLD wld)
     for (i = 0; i < wld->owntbl->size; ++i)
         pairs[i].owner = i + USER;
 
-    for (i = 0; i < wld->pgmq->size; ++i)
-        if (wld->pgmq->data[i].owner != SYSTEM)
-            pairs[wld->pgmq->data[i].owner - USER].score += wld->pgmq->data[i].size;
+    for (i = 0; i < wld->prcsq->size; ++i)
+        if (wld->prcsq->data[i].owner != SYSTEM)
+            pairs[wld->prcsq->data[i].owner - USER].score += wld->prcsq->data[i].size;
 
     qsort(pairs, wld->owntbl->size, sizeof(SCORE_OWNER_PAIR), ScoreOwnerPairComparator);
 
@@ -515,18 +515,18 @@ VOID World_Run(PWORLD wld)
 {
     UINT i;
     for (i = 0; i < wld->iteration_number; ++i)
-        Program_Tick(wld->pgmq, wld->mem);
+        Processor_Tick(wld->prcsq, wld->mem);
 }
 
-VOID Memory_Write(PMEMORY mem, PPROGRAM pgm, UINT addr, BYTE data)
+VOID Memory_Write(PMEMORY mem, PPROCESSOR prcs, UINT addr, BYTE data)
 {
     if (mem->size >= addr)
         return;
-    if (pgm->owner == *Memory_Owner(mem, addr))
+    if (prcs->owner == *Memory_Owner(mem, addr))
         *Memory_Data(mem, addr) = data;
 }
 
-BYTE Memory_Read(PMEMORY mem, PPROGRAM pgm, UINT addr)
+BYTE Memory_Read(PMEMORY mem, PPROCESSOR prcs, UINT addr)
 {
     if (mem->size >= addr)
         return NOP;
@@ -538,173 +538,173 @@ BOOL Memory_OutOfMemory(PMEMORY mem, UINT addr)
     return mem->size >= addr;
 }
 
-VOID NOP_(PMEMORY mem, PPROGRAM pgm)
+VOID NOP_(PMEMORY mem, PPROCESSOR prcs)
 {
-    Program_IncreceProgramCounter(pgm, 1);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID NEXT_(PMEMORY mem, PPROGRAM pgm)
+VOID NEXT_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->ptr += pgm->rgst;
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->ptr += prcs->rgst;
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID PREV_(PMEMORY mem, PPROGRAM pgm)
+VOID PREV_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->ptr -= pgm->rgst;
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->ptr -= prcs->rgst;
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID ADD_(PMEMORY mem, PPROGRAM pgm)
+VOID ADD_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst += Memory_Read(mem, pgm, pgm->ptr);
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst += Memory_Read(mem, prcs, prcs->ptr);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID SUB_(PMEMORY mem, PPROGRAM pgm)
+VOID SUB_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst -= Memory_Read(mem, pgm, pgm->ptr);
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst -= Memory_Read(mem, prcs, prcs->ptr);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID AND_(PMEMORY mem, PPROGRAM pgm)
+VOID AND_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst &= Memory_Read(mem, pgm, pgm->ptr);
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst &= Memory_Read(mem, prcs, prcs->ptr);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID OR_(PMEMORY mem, PPROGRAM pgm)
+VOID OR_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst |= Memory_Read(mem, pgm, pgm->ptr);
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst |= Memory_Read(mem, prcs, prcs->ptr);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID XOR_(PMEMORY mem, PPROGRAM pgm)
+VOID XOR_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst ^= Memory_Read(mem, pgm, pgm->ptr);
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst ^= Memory_Read(mem, prcs, prcs->ptr);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID NOT_(PMEMORY mem, PPROGRAM pgm)
+VOID NOT_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst = (pgm->rgst != 0) ? 0 : ~0;
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst = (prcs->rgst != 0) ? 0 : ~0;
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID SLA_(PMEMORY mem, PPROGRAM pgm)
+VOID SLA_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst <<= Memory_Read(mem, pgm, pgm->ptr);
-    pgm->rgst &= ~1;
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst <<= Memory_Read(mem, prcs, prcs->ptr);
+    prcs->rgst &= ~1;
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID SRA_(PMEMORY mem, PPROGRAM pgm)
+VOID SRA_(PMEMORY mem, PPROCESSOR prcs)
 {
     UINT msb;
-    msb = Memory_Read(mem, pgm, pgm->ptr) & 0x80000000;
-    pgm->rgst >>= Memory_Read(mem, pgm, pgm->ptr);
-    pgm->rgst |= msb;
-    Program_IncreceProgramCounter(pgm, 1);
+    msb = Memory_Read(mem, prcs, prcs->ptr) & 0x80000000;
+    prcs->rgst >>= Memory_Read(mem, prcs, prcs->ptr);
+    prcs->rgst |= msb;
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID SLL_(PMEMORY mem, PPROGRAM pgm)
+VOID SLL_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst <<= Memory_Read(mem, pgm, pgm->ptr);
-    pgm->rgst &= 0x8FFFFFFF;
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst <<= Memory_Read(mem, prcs, prcs->ptr);
+    prcs->rgst &= 0x8FFFFFFF;
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID SRL_(PMEMORY mem, PPROGRAM pgm)
+VOID SRL_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst >>= Memory_Read(mem, pgm, pgm->ptr);
-    pgm->rgst &= ~1;
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst >>= Memory_Read(mem, prcs, prcs->ptr);
+    prcs->rgst &= ~1;
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID READ_(PMEMORY mem, PPROGRAM pgm)
+VOID READ_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst = Memory_Read(mem, pgm, pgm->ptr);
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst = Memory_Read(mem, prcs, prcs->ptr);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID WRITE_(PMEMORY mem, PPROGRAM pgm)
+VOID WRITE_(PMEMORY mem, PPROCESSOR prcs)
 {
-    Memory_Write(mem, pgm, pgm->ptr, pgm->rgst);
-    Program_IncreceProgramCounter(pgm, 1);
+    Memory_Write(mem, prcs, prcs->ptr, prcs->rgst);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID SAVE_(PMEMORY mem, PPROGRAM pgm)
+VOID SAVE_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->tmp = pgm->rgst;
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->tmp = prcs->rgst;
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID SWAP_(PMEMORY mem, PPROGRAM pgm)
+VOID SWAP_(PMEMORY mem, PPROCESSOR prcs)
 {
     UINT tmp;
-    tmp = pgm->tmp;
-    pgm->tmp = pgm->rgst;
-    pgm->rgst = tmp;
-    Program_IncreceProgramCounter(pgm, 1);
+    tmp = prcs->tmp;
+    prcs->tmp = prcs->rgst;
+    prcs->rgst = tmp;
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID SET_(PMEMORY mem, PPROGRAM pgm)
+VOID SET_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst = Memory_Read(mem, pgm, pgm->pc + 1);
-    Program_IncreceProgramCounter(pgm, 2);
+    prcs->rgst = Memory_Read(mem, prcs, prcs->pc + 1);
+    Processor_IncreceProgramCounter(prcs, 2);
 }
 
-VOID JMP_(PMEMORY mem, PPROGRAM pgm)
+VOID JMP_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->pc = pgm->rgst;
-    Program_RoundProgramCounter(pgm);
+    prcs->pc = prcs->rgst;
+    Processor_RoundProgramCounter(prcs);
 }
 
-VOID JEZ_(PMEMORY mem, PPROGRAM pgm)
+VOID JEZ_(PMEMORY mem, PPROCESSOR prcs)
 {
-    if (pgm->tmp == 0)
-        pgm->pc = pgm->rgst;
-    Program_RoundProgramCounter(pgm);
+    if (prcs->tmp == 0)
+        prcs->pc = prcs->rgst;
+    Processor_RoundProgramCounter(prcs);
 }
 
-VOID PUSH_(PMEMORY mem, PPROGRAM pgm)
+VOID PUSH_(PMEMORY mem, PPROCESSOR prcs)
 {
-    --pgm->sp;
-    Memory_Write(mem, pgm, pgm->sp, pgm->rgst);
-    Program_IncreceProgramCounter(pgm, 1);
+    --prcs->sp;
+    Memory_Write(mem, prcs, prcs->sp, prcs->rgst);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID POP_(PMEMORY mem, PPROGRAM pgm)
+VOID POP_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->rgst = Memory_Read(mem, pgm, pgm->sp);
-    ++pgm->sp;
-    Program_IncreceProgramCounter(pgm, 1);
+    prcs->rgst = Memory_Read(mem, prcs, prcs->sp);
+    ++prcs->sp;
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID CALL_(PMEMORY mem, PPROGRAM pgm)
+VOID CALL_(PMEMORY mem, PPROCESSOR prcs)
 {
-    if (pgm->pc + 1 >= pgm->size)
+    if (prcs->pc + 1 >= prcs->size)
         return;
-    --pgm->sp;
-    Memory_Write(mem, pgm, pgm->sp, pgm->pc + 2);
-    pgm->pc = Memory_Read(mem, pgm, pgm->pc + 1);
+    --prcs->sp;
+    Memory_Write(mem, prcs, prcs->sp, prcs->pc + 2);
+    prcs->pc = Memory_Read(mem, prcs, prcs->pc + 1);
 }
 
-VOID RET_(PMEMORY mem, PPROGRAM pgm)
+VOID RET_(PMEMORY mem, PPROCESSOR prcs)
 {
-    pgm->pc = Memory_Read(mem, pgm, pgm->sp);
-    ++pgm->sp;
-    Program_RoundProgramCounter(pgm);
+    prcs->pc = Memory_Read(mem, prcs, prcs->sp);
+    ++prcs->sp;
+    Processor_RoundProgramCounter(prcs);
 }
 
-VOID PREPARE_(PMEMORY mem, PPROGRAM pgm)
+VOID PREPARE_(PMEMORY mem, PPROCESSOR prcs)
 {
-    Program_IncreceProgramCounter(pgm, 1);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
-VOID MALLOC_(PMEMORY mem, PPROGRAM pgm)
+VOID MALLOC_(PMEMORY mem, PPROCESSOR prcs)
 {
-    Program_IncreceProgramCounter(pgm, 1);
+    Processor_IncreceProgramCounter(prcs, 1);
 }
 
 #define DECLARE_INSTRUCTION_INFO(s) {TO_STRING(s), s, s##_}
@@ -1124,7 +1124,7 @@ INT main(INT argc, CONST_STRING * argv)
 メモリの各番地には、命令セットに含まれるいずれかの値が格納される。
 各プレイヤーが自作したプログラムは、ランダムに選択されたメモリに連続して配置される。
 
-プログラムは以下の要素から構成される。
+プロセッサは以下の要素から構成される。
 
     プログラムカウンタ
     ポインタ
@@ -1132,11 +1132,11 @@ INT main(INT argc, CONST_STRING * argv)
     テンポラリレジスタ
     スタックポインタ
 
-プログラムのコードがメモリに配置されるとき、
-プログラムカウンタとポインタは配置されたコードの先頭のアドレスに設定され、
+プログラムがメモリに配置されるとき、配置されたプログラムにプロセッサが割り当てられる。
+プロセッサのプログラムカウンタとポインタは配置されたコードの先頭のアドレスに設定され、
 スタックポインタは配置されたコードの末尾のアドレスに設定される。
-プログラムのコードが実行されるたび、プログラムカウンタはひとつインクリメントされる。(JMP, JEZを除く)
-プログラムカウンタがプログラムのコードの範囲を超えた場合、プログラムカウンタは配置されたコードの先頭を指すよう設定される。
+プロセッサによりプログラムが実行されるたび、プログラムカウンタはひとつインクリメントされる。(JMP, JEZを除く)
+プログラムカウンタが配置されたプログラムの範囲を超えた場合、プログラムカウンタは配置されたプログラムの先頭のアドレスに変更される。
 
 命令セットは brainf*ck を参考に設計されている。
 
@@ -1170,7 +1170,7 @@ INT main(INT argc, CONST_STRING * argv)
              スタックポインタの値を確保されたメモリの末尾に変更する。
 
 メモリの読み書きには制限がある。
-メモリに配置されたプログラムは、自身の所有者以外により所有されているプログラムが配置されたメモリに書き込むことができず、読み込むことだけができる。
+プログラムに割り当てられたプロセッサは、自身の所有者以外により所有されているプログラムが配置されたメモリに書き込むことができず、読み込むことだけができる。
 それ以外のメモリに対しては、読み込みと書き込みの両方ができる。
 メモリの読み書きの権限について以下に記載する。
 
@@ -1178,7 +1178,7 @@ INT main(INT argc, CONST_STRING * argv)
     ・R- 自身の所有者以外により所有されているプログラムが配置されたメモリ
     ・RW いずれのプログラムも配置されていないメモリ
 
-ここで、プログラム自身が配置されたメモリは、プログラム自身の書き込みにより変更することができることに注意する。
+ここで、プログラムが配置されたメモリは、プログラムに割り当てられたプロセッサの書き込みにより変更することができることに注意する。
 「メモリに配置されたプログラムが計算のため使用できるメモリ」と「メモリに配置されたプログラム自身のコード」の間には区別がない。
 換言すれば、プログラムは実行時に自己を変更することができる。
 これらの仕様から、通常のプログラムの設計においては、計算のために使用するメモリ領域を、プログラムのコード領域に含める必要があるだろう。
@@ -1188,9 +1188,10 @@ INT main(INT argc, CONST_STRING * argv)
 自己複製の処理を複数のプログラムにより分担して実行することができれば、自己複製の速度を向上させることができる。
 
 ゲームが進行すると、いずれのメモリにもプログラムが配置され、そのままでは新しいプログラムを配置することが不可能になる。
-そのため、プログラムが自己複製を試みる際に空きメモリが不足していた場合、システムは最も古くに配置されたプログラムを破棄する。
-この破棄は空きメモリの不足が解消されるまで繰り返される。
-破棄されたプログラムは実行されなくなるが、メモリに配置されたコードはそのまま残る。
+そのため、プログラムが自己複製を試みる際に空きメモリが不足していた場合、
+システムは最も古くにプログラムを配置したメモリを解放し、そのプログラムに割り当てられていたプロセッサを解放する。
+この解放は空きメモリの不足が解消されるまで繰り返される。
+解放されたプロセッサは実行されなくなり、解放されたメモリに配置されたプログラムはそのまま残る。
 
 このゲームは完全な再現性を有する。
 乱数生成の方式は公開され、変更されない。
