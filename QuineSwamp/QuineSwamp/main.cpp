@@ -233,6 +233,8 @@ UINT String_Size(PSTRING str);
 BOOL String_Copy(PSTRING dst, PSTRING src);
 BOOL String_CopyCStr(PSTRING dst, PCONST_CHAR src);
 BOOL String_Cat(PSTRING dst, PSTRING src);
+UINT String_Comapre(PCONST_STRING dst, PCONST_STRING src);
+UINT String_ICompare(PCONST_STRING dst, PCONST_STRING src);
 
 BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size);
 PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file);
@@ -965,6 +967,16 @@ BOOL String_Cat(PSTRING dst, PSTRING src)
         return FALSE;
     memcpy(dst->data + dst->size, src->data, String_Size(src) + 1);
     return TRUE;
+}
+
+UINT String_Comapre(PCONST_STRING dst, PCONST_STRING src)
+{
+    return strcmp(String_Data(dst), String_Data(dst));
+}
+
+UINT String_ICompare(PCONST_STRING dst, PCONST_STRING src)
+{
+    return stricmp(String_Data(dst), String_Data(dst));
 }
 
 BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size)
