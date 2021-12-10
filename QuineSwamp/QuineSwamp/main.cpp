@@ -11,8 +11,8 @@ typedef unsigned char BYTE, * PBYTE;
 typedef unsigned char BOOL;
 typedef unsigned int UINT, * PUINT;
 typedef int INT, * PINT;
-typedef char CHAR, * PCHAR, * STRING;
-typedef CONST CHAR * CONST_STRING;
+typedef char CHAR, * PCHAR;
+typedef CONST CHAR * PCONST_CHAR;
 
 #define TRUE  1
 #define FALSE 0
@@ -72,7 +72,10 @@ enum INSTRUCTION
     FORWARD_DECLARATION(SCORE_WONER_PAIR);
     FORWARD_DECLARATION(STRING_UINT_PAIR);
     FORWARD_DECLARATION(STRING_UINT_MAP );
+    FORWARD_DECLARATION(STRING          );
 #undef FORWARD_DECLARATION
+
+typedef CONST PSTRING PCONST_STRING;
 
 typedef struct MEMORY_
 {
@@ -162,6 +165,13 @@ typedef struct STRING_UINT_MAP_
     PSTRING_UINT_PAIR data;
 } STRING_UINT_MAP, * PSTRING_UINT_MAP;
 
+typedef struct STRING_
+{
+    UINT size;
+    UINT maxsize;
+    PCHAR data;
+} STRING, * PSTRING;
+
 VOID * NativeMalloc(UINT size);
 VOID * NativeRealloc(VOID * ptr, UINT size);
 VOID NativeFree(VOID * ptr);
@@ -192,7 +202,7 @@ VOID Memory_Release(PMEMORY mem);
 
 POWNER_TABLE OwnerTable_Create(UINT size);
 VOID OwnerTable_Release(POWNER_TABLE owntbl);
-CONST_STRING OwnerTable_Name(POWNER_TABLE owntbl, UINT owner);
+PCONST_CHAR OwnerTable_Name(POWNER_TABLE owntbl, UINT owner);
 
 PWORLD World_Create(PWORLD_PARAM param);
 VOID World_Release(PWORLD wld);
@@ -203,34 +213,43 @@ VOID Memory_Write(PMEMORY mem, PPROCESSOR prcs, UINT addr, BYTE data);
 BYTE Memory_Read(PMEMORY mem, PPROCESSOR prcs, UINT addr);
 BOOL Memory_OutOfMemory(PMEMORY mem, UINT addr);
 
-CONST_STRING CodeToMnemonic(BYTE code);
-BYTE MnemonicToCode(CONST_STRING mnemonic);
+PCONST_CHAR CodeToMnemonic(BYTE code);
+BYTE MnemonicToCode(PCONST_CHAR mnemonic);
 INSTRUCTION_IMPL CodeToImpl(BYTE code);
-BOOL StringToUint(CONST_STRING s, PUINT value);
-BOOL IsLabelDeclaration(CONST_STRING s);
+BOOL StringToUint(PCONST_CHAR s, PUINT value);
+BOOL IsLabelDeclaration(PCONST_CHAR s);
 
 UINT ReadUInt(PBYTE destination);
 VOID WriteUInt(PBYTE destination, UINT value);
-BOOL ReplaceExtension(CONST_STRING source, STRING replaced, CONST_STRING extension);
-BOOL GetAssemblyFilePath(CONST_STRING source, STRING destination);
-BOOL GetLogFilePath(CONST_STRING source, STRING destination);
+BOOL ReplaceExtension(PCONST_CHAR source, PCHAR replaced, PCONST_CHAR extension);
+BOOL GetAssemblyFilePath(PCONST_CHAR source, PCHAR destination);
+BOOL GetLogFilePath(PCONST_CHAR source, PCHAR destination);
+
+PSTRING String_Create(PCONST_CHAR s);
+VOID String_Release(PSTRING str);
+BOOL String_Reserve(PSTRING str, UINT reserve);
+PCHAR String_Data(PSTRING str);
+UINT String_Size(PSTRING str);
+BOOL String_Copy(PSTRING dst, PSTRING src);
+BOOL String_CopyCStr(PSTRING dst, PCONST_CHAR src);
+BOOL String_Cat(PSTRING dst, PSTRING src);
 
 BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size);
-PASSEMBLY Assembly_CreateFromFile(CONST_STRING file);
+PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file);
 VOID Assembly_Release(PASSEMBLY asm_);
 VOID Assembly_Deploy(PMEMORY mem, PASSEMBLY asm_, UINT owner);
-BOOL Assembly_CreateFile(PASSEMBLY asm_, CONST_STRING path);
+BOOL Assembly_CreateFile(PASSEMBLY asm_, PCONST_CHAR path);
 
 INT ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b);
-CONST_STRING SuffixString(UINT n);
+PCONST_CHAR SuffixString(UINT n);
 
 PSTRING_UINT_MAP StringUIntMap_Create();
 VOID StringUIntMap_Release(PSTRING_UINT_MAP suimap);
-BOOL StringUIntMap_Add(PSTRING_UINT_MAP suimap, CONST_STRING s, UINT ui);
-BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, CONST_STRING s, PUINT ui);
+BOOL StringUIntMap_Add(PSTRING_UINT_MAP suimap, PCONST_CHAR s, UINT ui);
+BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, PCONST_CHAR s, PUINT ui);
 
 VOID PrintHelp();
-VOID ParseCommandLine(INT argc, CONST_STRING * argv);
+VOID ParseCommandLine(INT argc, PCONST_CHAR * argv);
 
 VOID * NativeMalloc(UINT size)
 {
@@ -464,7 +483,7 @@ VOID OwnerTable_Release(POWNER_TABLE owntbl)
     }
 }
 
-CONST_STRING OwnerTable_Name(POWNER_TABLE owntbl, UINT owner)
+PCONST_CHAR OwnerTable_Name(POWNER_TABLE owntbl, UINT owner)
 {
     return owntbl->data[owner - USER].name;
 }
@@ -708,8 +727,8 @@ VOID MALLOC_(PMEMORY mem, PPROCESSOR prcs)
     Processor_IncreceProgramCounter(prcs, 1);
 }
 
-#define DECLARE_INSTRUCTION_INFO(s) {TO_STRING(s), s, s##_}
 INSTRUCTION_INFO instruction_info_table[] = {
+#define DECLARE_INSTRUCTION_INFO(s) {TO_STRING(s), s, s##_}
     DECLARE_INSTRUCTION_INFO(NOP    ),
     DECLARE_INSTRUCTION_INFO(NEXT   ),
     DECLARE_INSTRUCTION_INFO(PREV   ),
@@ -736,15 +755,15 @@ INSTRUCTION_INFO instruction_info_table[] = {
     DECLARE_INSTRUCTION_INFO(RET    ),
     DECLARE_INSTRUCTION_INFO(PREPARE),
     DECLARE_INSTRUCTION_INFO(MALLOC )
-};
 #undef DECLARE_INSTRUCTION_INFO
+};
 
-CONST_STRING CodeToMnemonic(BYTE code)
+PCONST_CHAR CodeToMnemonic(BYTE code)
 {
     return instruction_info_table[code].mnemonic;
 }
 
-BYTE MnemonicToCode(CONST_STRING mnemonic)
+BYTE MnemonicToCode(PCONST_CHAR mnemonic)
 {
     UINT i;
     for (i = 0; i < sizeof(instruction_info_table) / sizeof(*instruction_info_table); ++i)
@@ -758,9 +777,9 @@ INSTRUCTION_IMPL CodeToImpl(BYTE code)
     return instruction_info_table[code].impl;
 }
 
-BOOL StringToUint(CONST_STRING s, PUINT value)
+BOOL StringToUint(PCONST_CHAR s, PUINT value)
 {
-    CONST_STRING cur;
+    PCONST_CHAR cur;
 
     if (s == NULL || s[0] == '\0')
         return FALSE;
@@ -806,12 +825,18 @@ BOOL StringToUint(CONST_STRING s, PUINT value)
     }
 }
 
-BOOL IsLabelDeclaration(CONST_STRING s)
+BOOL IsLabelDeclaration(PCONST_CHAR s)
 {
-    if (*s != ':')
+    UINT len, i;
+    len = strlen(s);
+    if (len < 2)
         return FALSE;
-    for (++s; isalnum(*s); ++s);
-    return *s ? FALSE : TRUE;
+    if (s[len - 1] != ':')
+        return FALSE;
+    for (i = 0; i < len - 1; ++i)
+        if (!isalnum(s[i]))
+            return FALSE;
+    return TRUE;
 }
 
 UINT ReadUInt(PBYTE destination)
@@ -830,9 +855,9 @@ VOID WriteUInt(PBYTE destination, UINT value)
         destination[i] = ((value >> (8 * i)) & 0xff);
 }
 
-BOOL ReplaceExtension(CONST_STRING source, STRING replaced, CONST_STRING extension)
+BOOL ReplaceExtension(PCONST_CHAR source, PCHAR replaced, PCONST_CHAR extension)
 {
-    CONST_STRING name, ext;
+    PCONST_CHAR name, ext;
 
     if (!source || !replaced)
         return FALSE;
@@ -853,14 +878,93 @@ BOOL ReplaceExtension(CONST_STRING source, STRING replaced, CONST_STRING extensi
     return TRUE;
 }
 
-BOOL GetAssemblyFilePath(CONST_STRING source, STRING destination)
+BOOL GetAssemblyFilePath(PCONST_CHAR source, PCHAR destination)
 {
     return ReplaceExtension(source, destination, ".qs");
 }
 
-BOOL GetLogFilePath(CONST_STRING source, STRING destination)
+BOOL GetLogFilePath(PCONST_CHAR source, PCHAR destination)
 {
     return ReplaceExtension(source, destination, ".log");
+}
+
+PSTRING String_Create(PCONST_CHAR s)
+{
+#define STRING_DEFAULT_MAX_SIZE 32
+    PSTRING str;
+ 
+    str = (PSTRING)NativeMalloc(sizeof(STRING));
+    if (!str)
+        return NULL;
+    
+    str->maxsize = STRING_DEFAULT_MAX_SIZE;
+    str->data = (PCHAR)NativeMalloc(str->maxsize);
+    if (!str->data)
+        goto error;
+
+    return str;
+
+error:
+    String_Release(str);
+    return NULL;
+#undef STRING_DEFAULT_MAX_SIZE
+}
+
+VOID String_Release(PSTRING str)
+{
+    if (str)
+    {
+        NativeFree(str->data);
+        NativeFree(str);
+    }
+}
+
+BOOL String_Reserve(PSTRING str, UINT reserve)
+{
+    if (reserve <= str->maxsize)
+        return TRUE;
+
+    str->maxsize *= 2;
+    str->data = (PCHAR)NativeRealloc(str->data, str->maxsize);
+
+    if (!str->data)
+        return FALSE;
+
+    return TRUE;
+}
+
+PCHAR String_Data(PSTRING str)
+{
+    return str->data;
+}
+
+UINT String_Size(PSTRING str)
+{
+    return strlen(str->data);
+}
+
+BOOL String_Copy(PSTRING dst, PSTRING src)
+{
+    if (!String_Reserve(dst, String_Size(src) + 1))
+        return FALSE;
+    memcpy(dst->data, src->data, String_Size(src) + 1);
+    return TRUE;
+}
+
+BOOL String_CopyCStr(PSTRING dst, PCONST_CHAR src)
+{
+    if (!String_Reserve(dst, strlen(src) + 1))
+        return FALSE;
+    memcpy(dst->data, src, strlen(src) + 1);
+    return TRUE;
+}
+
+BOOL String_Cat(PSTRING dst, PSTRING src)
+{
+    if (!String_Reserve(dst, String_Size(dst) + String_Size(src) + 1))
+        return FALSE;
+    memcpy(dst->data + dst->size, src->data, String_Size(src) + 1);
+    return TRUE;
 }
 
 BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size)
@@ -877,14 +981,16 @@ BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size)
     return TRUE;
 }
 
+PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
+{
 #define DEFAULT_ASSEMBLY_SIZE 1024
 #define LINE_LENGTH_FORMAT 1024
 #define LINE_LENGTH (LINE_LENGTH_FORMAT + 1)
-PASSEMBLY Assembly_CreateFromFile(CONST_STRING file)
-{
+
     PASSEMBLY asm_;
     FILE * fp;
-    CHAR data[LINE_LENGTH];
+    PCHAR tokens;
+    CHAR data[LINE_LENGTH], label[MAX_LABEL];
     BYTE code;
     UINT value;
     BOOL valid;
@@ -892,6 +998,7 @@ PASSEMBLY Assembly_CreateFromFile(CONST_STRING file)
 
     valid = FALSE;
     asm_ = NULL;
+    tokens = NULL;
     suimap = NULL;
 
     fp = fopen(file, "rb");
@@ -918,11 +1025,12 @@ PASSEMBLY Assembly_CreateFromFile(CONST_STRING file)
 
         if (IsLabelDeclaration(data))
         {
-            if (StringUIntMap_Find(suimap, data + 1, NULL))
-                fprintf(stderr, "Already declared label %s\n", data + 1);
-            else
-                if (!StringUIntMap_Add(suimap, data + 1, asm_->size))
-                    goto cleanup;
+            strcpy(label, data);
+            label[strlen(label) - 1] = '\0';
+            if (StringUIntMap_Find(suimap, label, NULL))
+                fprintf(stderr, "Already declared label %s\n", label);
+            else if (!StringUIntMap_Add(suimap, label, asm_->size))
+                goto cleanup;
         }
         else if (StringUIntMap_Find(suimap, data + 1, &value) || StringToUint(data, &value))
         {
@@ -961,10 +1069,11 @@ cleanup:
     }
 
     return asm_;
-}
+
 #undef LINE_LENGTH
 #undef LINE_LENGTH_FORMAT
 #undef DEFAULT_ASSEMBLY_SIZE
+}
 
 VOID Assembly_Release(PASSEMBLY asm_)
 {
@@ -986,7 +1095,7 @@ VOID Assembly_Deploy(PMEMORY mem, PASSEMBLY asm_, UINT owner)
     }
 }
 
-BOOL Assembly_CreateFile(PASSEMBLY asm_, CONST_STRING path)
+BOOL Assembly_CreateFile(PASSEMBLY asm_, PCONST_CHAR path)
 {
     FILE * fp;
     BOOL result;
@@ -1010,7 +1119,7 @@ INT ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b)
     return ((PSCORE_OWNER_PAIR)b)->score - ((PSCORE_OWNER_PAIR)a)->score;
 }
 
-CONST_STRING SuffixString(UINT n)
+PCONST_CHAR SuffixString(UINT n)
 {
     if (n == 1)
         return "st";
@@ -1021,9 +1130,10 @@ CONST_STRING SuffixString(UINT n)
     return "th";
 }
 
-#define STRING_UINT_MAP_DEFAULT_MAX_SIZE 256
 PSTRING_UINT_MAP StringUIntMap_Create()
 {
+#define STRING_UINT_MAP_DEFAULT_MAX_SIZE 256
+
     PSTRING_UINT_MAP suimap;
 
     suimap = (PSTRING_UINT_MAP)NativeMalloc(sizeof(STRING_UINT_MAP));
@@ -1040,6 +1150,8 @@ PSTRING_UINT_MAP StringUIntMap_Create()
 error:
     StringUIntMap_Release(suimap);
     return NULL;
+
+#undef STRING_UINT_MAP_DEFAULT_MAX_SIZE
 }
 
 VOID StringUIntMap_Release(PSTRING_UINT_MAP suimap)
@@ -1051,7 +1163,7 @@ VOID StringUIntMap_Release(PSTRING_UINT_MAP suimap)
     }
 }
 
-BOOL StringUIntMap_Add(PSTRING_UINT_MAP suimap, CONST_STRING s, UINT ui)
+BOOL StringUIntMap_Add(PSTRING_UINT_MAP suimap, PCONST_CHAR s, UINT ui)
 {
     if (suimap->size >= suimap->maxsize)
     {
@@ -1066,7 +1178,7 @@ BOOL StringUIntMap_Add(PSTRING_UINT_MAP suimap, CONST_STRING s, UINT ui)
     return TRUE;
 }
 
-BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, CONST_STRING s, PUINT ui)
+BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, PCONST_CHAR s, PUINT ui)
 {
     UINT i;
 
@@ -1088,7 +1200,7 @@ VOID PrintHelp()
     fprintf(stdin, "");
 }
 
-VOID ParseCommandLine(INT argc, CONST_STRING * argv)
+VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
 {
     UINT owner, owner_number;
     PASSEMBLY asm_;
@@ -1140,7 +1252,7 @@ VOID ParseCommandLine(INT argc, CONST_STRING * argv)
     World_Release(wld);
 }
 
-INT main(INT argc, CONST_STRING * argv)
+INT main(INT argc, PCONST_CHAR * argv)
 {
     ParseCommandLine(argc, argv);
     return 0;
