@@ -24,7 +24,7 @@ typedef VOID * PVOID;
 #define TO_STRING_(s) #s
 #define TO_STRING(s) TO_STRING_(s)
 
-#ifdef _NDEBUG
+#ifdef NDEBUG
     #define DEBUG(...)
 #else
     #define DEBUG_(file, func, line, ...) Debug(file, func, line, __VA_ARGS__)
@@ -231,7 +231,7 @@ BYTE Memory_Read(PMEMORY mem, PPROCESSOR prcs, UINT addr);
 BOOL Memory_OutOfMemory(PMEMORY mem, UINT addr);
 
 PCONST_CHAR CodeToMnemonic(BYTE code);
-BYTE MnemonicToCode(PCONST_CHAR mnemonic);
+UINT MnemonicToCode(PCONST_CHAR mnemonic);
 INSTRUCTION_IMPL CodeToImpl(BYTE code);
 BOOL StringToUint(PCONST_CHAR s, PUINT value);
 BOOL IsLabelDeclaration(PCONST_CHAR s);
@@ -792,7 +792,7 @@ PCONST_CHAR CodeToMnemonic(BYTE code)
     return instruction_info_table[code].mnemonic;
 }
 
-BYTE MnemonicToCode(PCONST_CHAR mnemonic)
+UINT MnemonicToCode(PCONST_CHAR mnemonic)
 {
     UINT i;
     for (i = 0; i < sizeof(instruction_info_table) / sizeof(*instruction_info_table); ++i)
@@ -1092,7 +1092,7 @@ PCHAR Tokens_CreateFromFile(PCONST_CHAR file)
 
     FILE * fp;
     UINT token_size;
-    CHAR c;
+    INT c;
     CHAR token[MAX_TOKEN];
     PCHAR tokens;
     UINT tokens_size, tokens_maxsize;
@@ -1105,13 +1105,13 @@ PCHAR Tokens_CreateFromFile(PCONST_CHAR file)
         return NULL;
 
     tokens_size = 0;
-    tokens_maxsize = 1024;
+    tokens_maxsize = MAX_TOKEN * 2;
     tokens = (PCHAR)NativeMalloc(sizeof(CHAR) * tokens_maxsize);
     if (!tokens)
         goto cleanup;
 
     token_size = 0;
-    while (fscanf(fp, "%c", &c) == EOF)
+    while ((c = fgetc(fp)) != EOF)
     {
         if (isalnum(c) || c == '_')
         {
@@ -1187,6 +1187,12 @@ VOID Tokens_Release(PCHAR tokens)
     NativeFree(tokens);
 }
 
+struct UINT_UINT_PAIR_;
+typedef struct UINT_UINT_PAIR_
+{
+    UINT a, b;
+} UINT_UINT_PAIR, * PUINT_UINT_PAIR;
+
 PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
 {
 #define DEFAULT_ASSEMBLY_SIZE 1024
@@ -1194,17 +1200,18 @@ PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
 #define LINE_LENGTH (LINE_LENGTH_FORMAT + 1)
 
     PASSEMBLY asm_;
-    CHAR label[MAX_LABEL];
-    BYTE code;
-    UINT value;
+    UINT code;
+    UINT value, i;
     BOOL valid;
-    PSTRING_UINT_MAP suimap;
-    PCHAR tokens, token;
+    PSTRING_UINT_MAP label_to_address, pending_label;
+    PCHAR tokens, token, next_token;
 
     valid = FALSE;
     asm_ = NULL;
-    suimap = NULL;
+    label_to_address = NULL;
+    pending_label = NULL;
     tokens = NULL;
+    next_token = NULL;
 
     asm_ = (PASSEMBLY)NativeMalloc(sizeof(ASSEMBLY));
     if (!asm_)
@@ -1215,53 +1222,96 @@ PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
     if (!asm_->data)
         goto cleanup;
 
-    suimap = StringUIntMap_Create();
-    if (!suimap)
+    label_to_address = StringUIntMap_Create();
+    if (!label_to_address)
         goto cleanup;
-    
+
+    pending_label = StringUIntMap_Create();
+    if (!pending_label)
+        goto cleanup;
+
     tokens = Tokens_CreateFromFile(file);
 
+    DEBUG("file=%s\n", file);
+    DEBUG("tokens=%p\n", tokens);
+
     token = tokens;
+    next_token = NULL;
     while (*token)
     {
-        DEBUG("token=%s", token);
-        if (IsLabelDeclaration(token))
+        DEBUG("token=\"%s\"\n", token);
+        next_token = token;
+        while (*next_token)
+            ++next_token;
+        ++next_token;
+
+        if (strcmp(next_token, ":") == 0)
         {
-            strcpy(label, token);
-            label[strlen(label) - 1] = '\0';
-            if (StringUIntMap_Find(suimap, label, NULL))
-                fprintf(stderr, "Already declared label %s\n", label);
-            else if (!StringUIntMap_Add(suimap, label, asm_->size))
+            DEBUG("label \"%s\" 0x%08x\n", token, asm_->size);
+            if (StringUIntMap_Find(label_to_address, token, NULL))
+                fprintf(stderr, "already declared label \"%s\"\n", token);
+            else if (!StringUIntMap_Add(label_to_address, token, asm_->size))
                 goto cleanup;
+
+            token = next_token + 2;
         }
-        else if (StringUIntMap_Find(suimap, token, &value) || StringToUint(token, &value))
+        else if (StringUIntMap_Find(label_to_address, token, &value) || StringToUint(token, &value))
         {
+            DEBUG("value 0x%08x\n", value);
             if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
                 goto cleanup;
             WriteUInt(&asm_->data[asm_->size], value);
             asm_->size += sizeof(value);
+
+            token = next_token;
+        }
+        else if ((code = MnemonicToCode(token)) != -1)
+        {
+            DEBUG("instruction %s (0x%02x)\n", token, (BYTE)code);
+            if (!Assembly_Reserve(asm_, asm_->size + sizeof(BYTE)))
+                goto cleanup;
+            asm_->data[asm_->size] = (BYTE)code;
+            asm_->size += sizeof(BYTE);
+
+            token = next_token;
         }
         else
         {
-            code = MnemonicToCode(token);
-            if (code == -1)
+            DEBUG("pending lable \"%s\"\n", token);
+            if (!StringUIntMap_Add(pending_label, token, asm_->size))
                 goto cleanup;
-            if (!Assembly_Reserve(asm_, asm_->size + sizeof(code)))
-                goto cleanup;
-            asm_->data[asm_->size] = code;
-            asm_->size += sizeof(code);
-        }
+            asm_->size += sizeof(UINT);
 
-        while (*token)
-            ++token;
-        ++token;
+            token = next_token;
+        }
+    }
+
+    for (i = 0; i < pending_label->size; ++i)
+    {
+        DEBUG("pending label \"%s\"\n", pending_label->data[i].label);
+
+        if (!StringUIntMap_Find(label_to_address, pending_label->data[i].label, &value))
+        {
+            DEBUG("unresolved lable \"%s\"\n", pending_label->data[i].label);
+            goto cleanup;
+        }
+        if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
+            goto cleanup; 
+        WriteUInt(&asm_->data[pending_label->data[i].addr], value);
+        DEBUG("pending label \"%s\" 0x%08x is resolved to 0x%08x\n", pending_label->data[i].label, pending_label->data[i].addr, value);
+    }
+
+    for (i = 0; i < label_to_address->size; ++i)
+    {
+        DEBUG("label \"%s\" 0x%08x\n", label_to_address->data[i].label, label_to_address->data[i].addr);
     }
 
     valid = TRUE;
 
 cleanup:
 
-    StringUIntMap_Release(suimap);
+    StringUIntMap_Release(label_to_address);
+    StringUIntMap_Release(pending_label);
     Tokens_Release(tokens);
 
     if (!valid)
@@ -1346,10 +1396,10 @@ PSTRING_UINT_MAP StringUIntMap_Create()
     if (!suimap)
         return NULL;
     
-    suimap->data = (PSTRING_UINT_PAIR)NativeMalloc(sizeof(STRING_UINT_PAIR) * STRING_UINT_MAP_DEFAULT_MAX_SIZE);
+    suimap->maxsize = STRING_UINT_MAP_DEFAULT_MAX_SIZE;
+    suimap->data = (PSTRING_UINT_PAIR)NativeMalloc(sizeof(STRING_UINT_PAIR) * suimap->maxsize);
     if (!suimap->data)
         goto error;
-    suimap->maxsize = STRING_UINT_MAP_DEFAULT_MAX_SIZE;
 
     return suimap;
 
@@ -1374,8 +1424,9 @@ BOOL StringUIntMap_Add(PSTRING_UINT_MAP suimap, PCONST_CHAR s, UINT ui)
     if (suimap->size >= suimap->maxsize)
     {
         suimap->maxsize *= 2;
-        suimap->data = (PSTRING_UINT_PAIR)NativeRealloc(suimap->data, suimap->maxsize);
-        return FALSE;
+        suimap->data = (PSTRING_UINT_PAIR)NativeRealloc(suimap->data, sizeof(STRING_UINT_PAIR) * suimap->maxsize);
+        if (!suimap->data)
+            return FALSE;
     }
 
     strcpy(suimap->data[suimap->size].label, s);
