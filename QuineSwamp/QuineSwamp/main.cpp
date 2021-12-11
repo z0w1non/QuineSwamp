@@ -799,24 +799,40 @@ BOOL SRL_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 
 BOOL READ_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
+    UINT i, value;
     BYTE data;
-    if (!Memory_Read(mem, prcs, prcs->ptr, &data))
+
+    value = 0;
+    for (i = 0; i < sizeof(UINT); ++i)
     {
-        prcs->pc = 0;
-        return TRUE;
+        if (!Memory_Read(mem, prcs, prcs->ptr, &data))
+        {
+            prcs->pc = 0;
+            return TRUE;
+        }
+        value |= data << (8 * i);
     }
-    prcs->rgst = data;
+    prcs->rgst = value;
+
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL WRITE_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    if (!Memory_Write(mem, prcs, prcs->ptr, prcs->rgst))
+    UINT i;
+    BYTE data;
+
+    for (i = 0; i < sizeof(UINT); ++i)
     {
-        prcs->pc = 0;
-        return TRUE;
+        data = (BYTE)(prcs->rgst >> (8 * i));
+        if (!Memory_Write(mem, prcs, prcs->ptr, data))
+        {
+            prcs->pc = 0;
+            return TRUE;
+        }
     }
+
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
