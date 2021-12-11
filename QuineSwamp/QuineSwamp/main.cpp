@@ -961,7 +961,6 @@ BOOL RESERVE_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
         prcs->rsvptr[prcs->rsv] = data;
     }
     ++prcs->rsv;
-    ++prcs->ptr;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -1797,7 +1796,7 @@ INT main(INT argc, PCONST_CHAR * argv)
     POP    : レジスタの値をスタックポインタが指すメモリの値に変更し、スタックポインタを 1 加算する。
     CALL   : スタックポインタを 1 減算し、スタックポインタが指すメモリの値を、プログラムカウンタの値に 2 を加算したアドレスに変更する。
     RET    : プログラムカウンタの値をスタックポインタが指すメモリの値に変更し、スタックポイントを 1 加算する。
-    RESERVE: ポインタが指すメモリの値(1バイト)を、次回 MALLOC を実行したときにメモリに配置されるプログラムの末尾に追加し、ポインタが指すメモリのアドレスを 1 加算する。
+    RESERVE: ポインタが指すメモリの値(1バイト)を、次回 MALLOC を実行したときにメモリに配置されるプログラムの末尾に追加する。
     MALLOC : RESERVE により蓄積されたデータを割り当てられたメモリに配置し、プロセッサを割り当てる。
 
 メモリの読み書きには制限がある。
