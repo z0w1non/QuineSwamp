@@ -3,6 +3,7 @@
 #include <string.h>
 #include <limits.h>
 #include <ctype.h>
+#include <stdarg.h>
 
 #define CONST const
 #define VOID void
@@ -13,6 +14,7 @@ typedef unsigned int UINT, * PUINT;
 typedef int INT, * PINT;
 typedef char CHAR, * PCHAR;
 typedef CONST CHAR * PCONST_CHAR;
+typedef VOID * PVOID;
 
 #define TRUE  1
 #define FALSE 0
@@ -21,6 +23,13 @@ typedef CONST CHAR * PCONST_CHAR;
 
 #define TO_STRING_(s) #s
 #define TO_STRING(s) TO_STRING_(s)
+
+#ifdef _NDEBUG
+    #define DEBUG(...)
+#else
+    #define DEBUG_(file, func, line, ...) Debug(file, func, line, __VA_ARGS__)
+    #define DEBUG(...) DEBUG_(__FILE__, __func__, __LINE__, __VA_ARGS__)
+#endif
 
 enum
 {
@@ -73,6 +82,7 @@ enum INSTRUCTION
     FORWARD_DECLARATION(STRING_UINT_PAIR);
     FORWARD_DECLARATION(STRING_UINT_MAP );
     FORWARD_DECLARATION(STRING          );
+    FORWARD_DECLARATION(VECTOR          );
 #undef FORWARD_DECLARATION
 
 typedef CONST PSTRING PCONST_STRING;
@@ -172,6 +182,13 @@ typedef struct STRING_
     PCHAR data;
 } STRING, * PSTRING;
 
+typedef struct VECTOR_
+{
+    UINT size;
+    UINT maxsize;
+    PVOID data;
+} VECTOR, * PVECTOR;
+
 VOID * NativeMalloc(UINT size);
 VOID * NativeRealloc(VOID * ptr, UINT size);
 VOID NativeFree(VOID * ptr);
@@ -236,6 +253,15 @@ BOOL String_Cat(PSTRING dst, PSTRING src);
 UINT String_Comapre(PCONST_STRING dst, PCONST_STRING src);
 UINT String_ICompare(PCONST_STRING dst, PCONST_STRING src);
 
+PVECTOR Vector_Create();
+VOID Vector_Release(PVECTOR vct);
+BOOL Vector_Reserve(PVECTOR vct, UINT reserve);
+PVOID Vector_Data(PVECTOR vct);
+PUINT Vector_Size(PVECTOR vct);
+
+PCHAR Tokens_CreateFromFile(PCONST_CHAR file);
+VOID Tokens_Release(PCHAR tokens);
+
 BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size);
 PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file);
 VOID Assembly_Release(PASSEMBLY asm_);
@@ -250,6 +276,7 @@ VOID StringUIntMap_Release(PSTRING_UINT_MAP suimap);
 BOOL StringUIntMap_Add(PSTRING_UINT_MAP suimap, PCONST_CHAR s, UINT ui);
 BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, PCONST_CHAR s, PUINT ui);
 
+VOID Debug(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ...);
 VOID PrintHelp();
 VOID ParseCommandLine(INT argc, PCONST_CHAR * argv);
 
@@ -979,6 +1006,61 @@ UINT String_ICompare(PCONST_STRING dst, PCONST_STRING src)
     return stricmp(String_Data(dst), String_Data(dst));
 }
 
+PVECTOR Vector_Create()
+{
+#define VECTOR_DEFAULT_MAX_SIZE 16
+    PVECTOR vct;
+
+    vct = (PVECTOR)NativeMalloc(sizeof(VECTOR));
+    if (!vct)
+        return NULL;
+
+    vct->maxsize = VECTOR_DEFAULT_MAX_SIZE;
+    vct->data = (PCHAR)NativeMalloc(vct->maxsize);
+    if (!vct->data)
+        goto error;
+
+    return vct;
+
+error:
+    Vector_Release(vct);
+    return NULL;
+#undef VECTOR_DEFAULT_MAX_SIZE
+}
+
+VOID Vector_Release(PVECTOR vct)
+{
+    if (vct)
+    {
+        NativeFree(vct->data);
+        NativeFree(vct);
+    }
+}
+
+BOOL Vector_Reserve(PVECTOR vct, UINT reserve)
+{
+    if (reserve <= vct->maxsize)
+        return TRUE;
+
+    vct->maxsize *= 2;
+    vct->data = (PVECTOR)NativeRealloc(vct->data, vct->maxsize);
+
+    if (!vct->data)
+        return FALSE;
+
+    return TRUE;
+}
+
+PVOID Vector_Data(PVECTOR vct)
+{
+    return vct->data;
+}
+
+PUINT Vector_Size(PVECTOR vct)
+{
+    return &vct->size;
+}
+
 BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size)
 {
     if (asm_->size + size <= asm_->maxsize)
@@ -993,6 +1075,118 @@ BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size)
     return TRUE;
 }
 
+BOOL Tokens_Reserve(PCHAR * tokens, PUINT maxsize, UINT reserve)
+{
+    if (reserve < *maxsize)
+        return TRUE;
+    *maxsize *= 2;
+    *tokens = (PCHAR)NativeRealloc(*tokens, *maxsize);
+    if (!tokens)
+        return FALSE;
+    return TRUE;
+}
+
+PCHAR Tokens_CreateFromFile(PCONST_CHAR file)
+{
+#define MAX_TOKEN 1024
+
+    FILE * fp;
+    UINT token_size;
+    CHAR c;
+    CHAR token[MAX_TOKEN];
+    PCHAR tokens;
+    UINT tokens_size, tokens_maxsize;
+    BOOL valid;
+
+    valid = FALSE;
+   
+    fp = fopen(file, "rb");
+    if (!fp)
+        return NULL;
+
+    tokens_size = 0;
+    tokens_maxsize = 1024;
+    tokens = (PCHAR)NativeMalloc(sizeof(CHAR) * tokens_maxsize);
+    if (!tokens)
+        goto cleanup;
+
+    token_size = 0;
+    while (fscanf(fp, "%c", &c) == EOF)
+    {
+        if (isalnum(c) || c == '_')
+        {
+            if (token_size + 1 == MAX_TOKEN)
+            {
+                token[MAX_TOKEN - 1] = '\0';
+                fprintf(stderr, "token too long %s...\n", token);
+                goto cleanup;
+            }
+            token[token_size++] = c;
+
+        }
+        else if (isspace(c) || c == ':')
+        {
+            if (token_size > 0)
+            {
+                token[token_size] = '\0';
+                if (!Tokens_Reserve(&tokens, &tokens_maxsize, tokens_size + token_size + 1))
+                    goto cleanup;
+                strcpy(tokens + tokens_size, token);
+                tokens_size += token_size + 1;
+                token_size = 0;
+            }
+
+            if (c == ':')
+            {
+                if (!Tokens_Reserve(&tokens, &tokens_maxsize, tokens_size + 2))
+                    goto cleanup;
+                strcpy(tokens + tokens_size, ":");
+                tokens_size += 2;
+            }
+        }
+        else
+        {
+            fprintf(stderr, "invalid character %c\n", c);
+            goto cleanup;
+        }
+    }
+
+    if (token_size > 0)
+    {
+        token[token_size] = '\0';
+        if (!Tokens_Reserve(&tokens, &tokens_maxsize, tokens_size + token_size + 1))
+            goto cleanup;
+        strcpy(tokens + tokens_size, token);
+        tokens_size += token_size + 1;
+        token_size = 0;
+    }
+
+    if (!Tokens_Reserve(&tokens, &tokens_maxsize, tokens_size + 1))
+        goto cleanup;
+    tokens[tokens_size] = '\0';
+
+    valid = TRUE;
+
+cleanup:
+    fclose(fp);
+
+    if (!valid)
+    {
+        Tokens_Release(tokens);
+        return NULL;
+    }
+
+    return tokens;
+
+#undef LINE_LENGTH_FORMAT
+#undef LINE_LENGTH
+}
+
+VOID Tokens_Release(PCHAR tokens)
+{
+    NativeFree(tokens);
+}
+
 PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
 {
 #define DEFAULT_ASSEMBLY_SIZE 1024
@@ -1000,22 +1194,17 @@ PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
 #define LINE_LENGTH (LINE_LENGTH_FORMAT + 1)
 
     PASSEMBLY asm_;
-    FILE * fp;
-    PCHAR tokens;
-    CHAR data[LINE_LENGTH], label[MAX_LABEL];
+    CHAR label[MAX_LABEL];
     BYTE code;
     UINT value;
     BOOL valid;
     PSTRING_UINT_MAP suimap;
+    PCHAR tokens, token;
 
     valid = FALSE;
     asm_ = NULL;
-    tokens = NULL;
     suimap = NULL;
-
-    fp = fopen(file, "rb");
-    if (!fp)
-        return NULL;
+    tokens = NULL;
 
     asm_ = (PASSEMBLY)NativeMalloc(sizeof(ASSEMBLY));
     if (!asm_)
@@ -1030,21 +1219,22 @@ PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
     if (!suimap)
         goto cleanup;
     
-    while (TRUE)
-    {
-        if (fscanf(fp, "%" TO_STRING(LINE_LENGTH_FORMAT) "s[a-zA-Z0-9:]%c*", data, &code) == EOF)
-            break;
+    tokens = Tokens_CreateFromFile(file);
 
-        if (IsLabelDeclaration(data))
+    token = tokens;
+    while (*token)
+    {
+        DEBUG("token=%s", token);
+        if (IsLabelDeclaration(token))
         {
-            strcpy(label, data);
+            strcpy(label, token);
             label[strlen(label) - 1] = '\0';
             if (StringUIntMap_Find(suimap, label, NULL))
                 fprintf(stderr, "Already declared label %s\n", label);
             else if (!StringUIntMap_Add(suimap, label, asm_->size))
                 goto cleanup;
         }
-        else if (StringUIntMap_Find(suimap, data + 1, &value) || StringToUint(data, &value))
+        else if (StringUIntMap_Find(suimap, token, &value) || StringToUint(token, &value))
         {
             if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
                 goto cleanup;
@@ -1053,7 +1243,7 @@ PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
         }
         else
         {
-            code = MnemonicToCode(data);
+            code = MnemonicToCode(token);
             if (code == -1)
                 goto cleanup;
             if (!Assembly_Reserve(asm_, asm_->size + sizeof(code)))
@@ -1061,14 +1251,18 @@ PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
             asm_->data[asm_->size] = code;
             asm_->size += sizeof(code);
         }
+
+        while (*token)
+            ++token;
+        ++token;
     }
 
     valid = TRUE;
 
 cleanup:
-    fclose(fp);
 
     StringUIntMap_Release(suimap);
+    Tokens_Release(tokens);
 
     if (!valid)
     {
@@ -1205,6 +1399,17 @@ BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, PCONST_CHAR s, PUINT ui)
     }
 
     return FALSE;
+}
+
+VOID Debug(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ...)
+{
+    va_list args;
+    va_start(args, format);
+
+    printf("%s(%d): ", func, line);
+    vprintf(format, args);
+
+    va_end(args);
 }
 
 VOID PrintHelp()
