@@ -208,7 +208,6 @@ PPROCESSOR ProcesserQueue_ReleaseOldest(PMEMORY mem, PPROCESSOR_TABLE prcst);
 BOOL InitMemoryAndProcesserPrimary(PMEMORY mem, PPROCESSOR_TABLE prcst, BYTE owner, PBYTE data, UINT size);
 BOOL InitMemoryAndProcesserSecondary(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR parent);
 
-BOOL Processor_Init(PPROCESSOR prcs, PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR parent);
 VOID Processor_RoundProgramCounter(PPROCESSOR prcs);
 VOID Processor_IncreceProgramCounter(PPROCESSOR prcs, UINT cnt);
 VOID Processor_DecreceProgramCounter(PPROCESSOR prcs);
@@ -220,7 +219,6 @@ PBYTE Memory_Owner(PMEMORY mem, UINT addr);
 
 VOID Memory_Init(PMEMORY mem, UINT addr, UINT size);
 BOOL FindFreeMemoryAndProcessor(PMEMORY mem, PPROCESSOR_TABLE prcst, UINT size, PUINT addr, PPROCESSOR * prcs);
-BOOL Memory_Deploy(PMEMORY mem, PBYTE data, UINT size);
 
 PMEMORY Memory_Create(UINT size);
 VOID Memory_Release(PMEMORY mem);
@@ -432,7 +430,10 @@ BOOL InitMemoryAndProcesserPrimary(PMEMORY mem, PPROCESSOR_TABLE prcst, BYTE own
     prcs->owner = owner;
 
     for (i = 0; i < prcs->size; ++i)
+    {
         *Memory_Data(mem, addr + i) = data[i];
+        *Memory_Owner(mem, addr + i) = owner;
+    }
 
     return TRUE;
 
@@ -466,7 +467,10 @@ BOOL InitMemoryAndProcesserSecondary(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCE
     prcs->owner = parent->owner;
 
     for (i = 0; i < prcs->size; ++i)
-        *Memory_Data(mem, addr + i) = prcs->rsvptr[i];
+    {
+        *Memory_Data(mem, addr + i) = parent->rsvptr[i];
+        *Memory_Owner(mem, addr + i) = parent->owner;
+    }
 
     return TRUE;
 
@@ -500,6 +504,7 @@ BOOL Processor_Step(PPROCESSOR prcs, PMEMORY mem, PPROCESSOR_TABLE prcst)
     if (code < INSTRUCTION_NUMBER)
         if (!CodeToImpl(code)(mem, prcst, prcs))
             return FALSE;
+    ++prcs->used;
     return TRUE;
 }
 
@@ -736,65 +741,35 @@ BOOL PREV_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 
 BOOL ADD_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    BYTE data;
-    if (!Memory_Read(mem, prcs, prcs->ptr, &data))
-    {
-        prcs->pc = 0;
-        return TRUE;
-    }
-    prcs->rgst += data;
+    prcs->rgst += prcs->tmp;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL SUB_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    BYTE data;
-    if (!Memory_Read(mem, prcs, prcs->ptr, &data))
-    {
-        prcs->pc = 0;
-        return TRUE;
-    }
-    prcs->rgst -= data;
+    prcs->rgst -= prcs->tmp;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL AND_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    BYTE data;
-    if (!Memory_Read(mem, prcs, prcs->ptr, &data))
-    {
-        prcs->pc = 0;
-        return TRUE;
-    }
-    prcs->rgst &= data;
+    prcs->rgst &= prcs->tmp;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL OR_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    BYTE data;
-    if (!Memory_Read(mem, prcs, prcs->ptr, &data))
-    {
-        prcs->pc = 0;
-        return TRUE;
-    }
-    prcs->rgst |= data;
+    prcs->rgst |= prcs->tmp;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL XOR_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    BYTE data;
-    if (!Memory_Read(mem, prcs, prcs->ptr, &data))
-    {
-        prcs->pc = 0;
-        return TRUE;
-    }
-    prcs->rgst ^= data;
+    prcs->rgst ^= prcs->tmp;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -808,14 +783,7 @@ BOOL NOT_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 
 BOOL SLA_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    BYTE data;
-    if (!Memory_Read(mem, prcs, prcs->ptr, &data))
-    {
-        prcs->pc = 0;
-        return TRUE;
-    }
-    prcs->rgst <<= data;
-    prcs->rgst &= ~1;
+    prcs->rgst = (prcs->tmp << prcs->rgst) & ~1;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -823,43 +791,22 @@ BOOL SLA_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 BOOL SRA_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
     UINT msb;
-    BYTE data;
-    if (!Memory_Read(mem, prcs, prcs->ptr, &data))
-    {
-        prcs->pc = 0;
-        return TRUE;
-    }
-    msb = data & 0x80000000;
-    prcs->rgst >>= data;
-    prcs->rgst |= msb;
+    msb = prcs->rgst & 0x80000000;
+    prcs->rgst = (prcs->tmp >> prcs->rgst) | msb;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL SLL_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    BYTE data;
-    if (!Memory_Read(mem, prcs, prcs->ptr, &data))
-    {
-        prcs->pc = 0;
-        return TRUE;
-    }
-    prcs->rgst <<= data;
-    prcs->rgst &= 0x8FFFFFFF;
+    prcs->rgst = (prcs->tmp << prcs->rgst) & 0x8FFFFFFF;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL SRL_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    BYTE data;
-    if (!Memory_Read(mem, prcs, prcs->ptr, &data))
-    {
-        prcs->pc = 0;
-        return TRUE;
-    }
-    prcs->rgst >>= data;
-    prcs->rgst &= ~1;
+    prcs->rgst = (prcs->tmp >> prcs->rgst) & ~1;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -1837,16 +1784,16 @@ INT main(INT argc, PCONST_CHAR * argv)
     NOP    : 何も行わない。
     NEXT   : ポインタが指すメモリのアドレスにレジスタの値を加算する。
     PREV   : ポインタが指すメモリのアドレスにレジスタの値を減算する。
-    ADD    : レジスタの値にポインタが指すメモリの値を加算する。
-    SUB    : レジスタの値にポインタが指すメモリの値を減算する。
-    AND    : レジスタの値にポインタが指すメモリの値をAND演算する。
-    OR     : レジスタの値にポインタが指すメモリの値をOR演算する。
-    XOR    : レジスタの値にポインタが指すメモリの値をXOR演算する。
+    ADD    : レジスタの値にテンポラリレジスタの値を加算し、レジスタの値をその結果に変更する。
+    SUB    : レジスタの値からテンポラリレジスタの値を減算し、レジスタの値をその結果に変更する。
+    AND    : レジスタの値とテンポラリレジスタの値でAND演算し、レジスタの値をその結果に変更する。
+    OR     : レジスタの値とテンポラリレジスタの値でOR演算し、レジスタの値をその結果に変更する。
+    XOR    : レジスタの値とテンポラリレジスタの値でXOR演算し、レジスタの値をその結果に変更する。
     NOT    : レジスタの値が 0 の場合、レジスタの値を全ビット1に設定する。レジスタの値が 1 の場合、レジスタの値を全ビット0に設定する。
-    SLA    : レジスタの値をポインタが指すメモリの値で算術左シフト演算する。
-    SRA    : レジスタの値をポインタが指すメモリの値で算術右シフト演算する。
-    SLL    : レジスタの値をポインタが指すメモリの値で論理左シフト演算する。
-    SRL    : レジスタの値をポインタが指すメモリの値で論理右シフト演算する。
+    SLA    : テンポラリレジスタの値をレジスタの値で算術左シフト演算し、レジスタの値をその結果に変更する。
+    SRA    : テンポラリレジスタの値をレジスタの値で算術右シフト演算し、レジスタの値をその結果に変更する。
+    SLL    : テンポラリレジスタの値をレジスタの値で論理左シフト演算し、レジスタの値をその結果に変更する。
+    SRL    : テンポラリレジスタの値をレジスタの値で論理右シフト演算し、レジスタの値をその結果に変更する。
     READ   : レジスタの値をポインタが指すメモリの値に変更する。
     WRITE  : ポインタが指すメモリの値をレジスタの値に変更する。
     SAVE   : テンポラリレジスタの値をレジスタの値に変更する。
