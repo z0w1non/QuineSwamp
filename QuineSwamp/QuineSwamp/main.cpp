@@ -234,7 +234,7 @@ PCONST_CHAR CodeToMnemonic(BYTE code);
 UINT MnemonicToCode(PCONST_CHAR mnemonic);
 INSTRUCTION_IMPL CodeToImpl(BYTE code);
 BOOL StringToUint(PCONST_CHAR s, PUINT value);
-BOOL IsLabelDeclaration(PCONST_CHAR s);
+BOOL IsLabel(PCONST_CHAR s);
 
 UINT ReadUInt(PBYTE destination);
 VOID WriteUInt(PBYTE destination, UINT value);
@@ -854,16 +854,16 @@ BOOL StringToUint(PCONST_CHAR s, PUINT value)
     }
 }
 
-BOOL IsLabelDeclaration(PCONST_CHAR s)
+BOOL IsLabel(PCONST_CHAR s)
 {
     UINT len, i;
     len = strlen(s);
-    if (len < 2)
+    if (isdigit(s[0]))
         return FALSE;
-    if (s[len - 1] != ':')
+    if (MnemonicToCode(s) != -1)
         return FALSE;
-    for (i = 0; i < len - 1; ++i)
-        if (!isalnum(s[i]))
+    for (i = 1; i < len; ++i)
+        if (!isalnum(s[i]) && s[i] != '_')
             return FALSE;
     return TRUE;
 }
@@ -1245,7 +1245,7 @@ PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
             ++next_token;
         ++next_token;
 
-        if (strcmp(next_token, ":") == 0)
+        if (strcmp(next_token, ":") == 0 && IsLabel(token))
         {
             DEBUG("label \"%s\" 0x%08x\n", token, asm_->size);
             if (StringUIntMap_Find(label_to_address, token, NULL))
