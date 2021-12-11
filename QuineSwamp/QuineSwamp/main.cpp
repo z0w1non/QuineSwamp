@@ -396,20 +396,6 @@ BOOL InitMemoryAndProcesserPrimary(PMEMORY mem, PPROCESSOR_TABLE prcst, BYTE own
     UINT i, addr;
     PPROCESSOR prcs;
 
-    //UINT    pid;
-    //UINT    addr;
-    //UINT    size;
-    //UINT    pc;
-    //UINT    sp;
-    //UINT    ptr;
-    //UINT    rgst;
-    //UINT    tmp;
-    //UINT    rsv;
-    //UINT    rsvmax;
-    //PBYTE   rsvptr;
-    //UINT    used;
-    //BYTE    owner;
-
     if (!FindFreeMemoryAndProcessor(mem, prcst, size, &addr, &prcs))
         return FALSE;
 
