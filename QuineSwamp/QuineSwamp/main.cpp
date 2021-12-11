@@ -40,8 +40,7 @@ enum
 enum INSTRUCTION
 {
     NOP    ,
-    NEXT   ,
-    PREV   ,
+    SEEK   ,
     ADD    ,
     SUB    ,
     AND    ,
@@ -711,16 +710,9 @@ BOOL NOP_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL NEXT_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
+BOOL SEEK_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->ptr += prcs->rgst;
-    Processor_IncreceProgramCounter(prcs, 1);
-    return TRUE;
-}
-
-BOOL PREV_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
-{
-    prcs->ptr -= prcs->rgst;
+    prcs->ptr = prcs->rgst;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -988,8 +980,7 @@ BOOL MALLOC_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 INSTRUCTION_INFO instruction_info_table[] = {
 #define DECLARE_INSTRUCTION_INFO(s) {TO_STRING(s), s, s##_}
     DECLARE_INSTRUCTION_INFO(NOP    ),
-    DECLARE_INSTRUCTION_INFO(NEXT   ),
-    DECLARE_INSTRUCTION_INFO(PREV   ),
+    DECLARE_INSTRUCTION_INFO(SEEK   ),
     DECLARE_INSTRUCTION_INFO(ADD    ),
     DECLARE_INSTRUCTION_INFO(SUB    ),
     DECLARE_INSTRUCTION_INFO(AND    ),
@@ -1784,8 +1775,7 @@ INT main(INT argc, PCONST_CHAR * argv)
 命令セットは brainf*ck を参考に設計されている。
 
     NOP    : 何も行わない。
-    NEXT   : ポインタが指すメモリのアドレスにレジスタの値を加算する。
-    PREV   : ポインタが指すメモリのアドレスにレジスタの値を減算する。
+    SEEK   : ポインタが指すメモリのアドレスをレジスタの値に変更する。
     ADD    : レジスタの値にテンポラリレジスタの値を加算し、レジスタの値をその結果に変更する。
     SUB    : レジスタの値からテンポラリレジスタの値を減算し、レジスタの値をその結果に変更する。
     AND    : レジスタの値とテンポラリレジスタの値でAND演算し、レジスタの値をその結果に変更する。
