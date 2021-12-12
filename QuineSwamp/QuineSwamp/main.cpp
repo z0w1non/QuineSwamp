@@ -15,6 +15,7 @@ typedef int INT, * PINT;
 typedef char CHAR, * PCHAR;
 typedef CONST CHAR * PCONST_CHAR;
 typedef VOID * PVOID;
+typedef size_t SIZE_T;
 
 #define TRUE  1
 #define FALSE 0
@@ -285,25 +286,41 @@ VOID Debug(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ..
 VOID PrintHelp();
 VOID ParseCommandLine(INT argc, PCONST_CHAR * argv);
 
-VOID * NativeMalloc(UINT size)
-{
-    VOID * tmp;
-    
-    tmp = malloc(size);
-    if (tmp)
-        memset(tmp, 0, size);
+#define OFFSET_(ptr, offset) ((VOID *)((CHAR *)ptr + offset))
+#define OFFSET(ptr, offset) OFFSET_(ptr, offset)
 
-    return tmp;
+VOID * NativeMalloc(SIZE_T size)
+{
+    if (!size)
+        return NULL;
+    VOID * tmp;
+    tmp = malloc(size + sizeof(SIZE_T));
+    if (!tmp)
+        return NULL;
+    *(SIZE_T *)tmp = size;
+    memset(OFFSET(tmp, sizeof(SIZE_T)), 0, size);
+    return OFFSET(tmp, sizeof(SIZE_T));
 }
 
-VOID * NativeRealloc(VOID * ptr, UINT size)
+VOID * NativeRealloc(VOID * ptr, SIZE_T size)
 {
-    return realloc(ptr, size);
+    if (!size)
+        return NULL;
+    if (size <= *(SIZE_T *)OFFSET(ptr, -sizeof(SIZE_T)))
+        return ptr;
+    VOID * tmp = realloc(OFFSET(ptr, -sizeof(SIZE_T)), size + sizeof(SIZE_T));
+    if (!tmp)
+        return NULL;
+    *(SIZE_T *)tmp = size;
+    memset(OFFSET(tmp, sizeof(SIZE_T)), 0, size);
+    return OFFSET(tmp, sizeof(SIZE_T));
 }
 
 VOID NativeFree(VOID * ptr)
 {
-    free(ptr);
+    if (!ptr)
+        return;
+    free(OFFSET(ptr, -sizeof(SIZE_T)));
 }
 
 UINT Random()
