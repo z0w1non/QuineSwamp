@@ -193,8 +193,8 @@ typedef struct VECTOR_
     PVOID data;
 } VECTOR, * PVECTOR;
 
-VOID * NativeMalloc(UINT size);
-VOID * NativeRealloc(VOID * ptr, UINT size);
+VOID * NativeMalloc(SIZE_T size);
+VOID * NativeRealloc(VOID * ptr, SIZE_T size);
 VOID NativeFree(VOID * ptr);
 
 UINT Random();
@@ -304,16 +304,20 @@ VOID * NativeMalloc(SIZE_T size)
 
 VOID * NativeRealloc(VOID * ptr, SIZE_T size)
 {
-    if (!size)
+    SIZE_T oldsize;
+    VOID * bodyptr;
+    if (!ptr || !size)
         return NULL;
-    if (size <= *(SIZE_T *)OFFSET(ptr, -, sizeof(SIZE_T)))
+    oldsize = *(SIZE_T *)OFFSET(ptr, -, sizeof(SIZE_T));
+    if (size <= oldsize)
         return ptr;
     VOID * tmp = realloc(OFFSET(ptr, -, sizeof(SIZE_T)), size + sizeof(SIZE_T));
     if (!tmp)
         return NULL;
     *(SIZE_T *)tmp = size;
-    memset(OFFSET(tmp, +, sizeof(SIZE_T)), 0, size);
-    return OFFSET(tmp, +, sizeof(SIZE_T));
+    bodyptr = OFFSET(tmp, +, sizeof(SIZE_T));
+    memset(OFFSET(bodyptr, +, oldsize), 0, size - oldsize);
+    return bodyptr;
 }
 
 VOID NativeFree(VOID * ptr)
