@@ -306,11 +306,6 @@ VOID * NativeRealloc(VOID * ptr, SIZE_T size)
 {
     if (!size)
         return NULL;
-
-    char * test1 = (char *)ptr;
-    test1 -= sizeof(size_t);
-    void * test2 = test1;
-    size_t test3 = *(size_t*)test2;
     if (size <= *(SIZE_T *)OFFSET(ptr, -, sizeof(SIZE_T)))
         return ptr;
     VOID * tmp = realloc(OFFSET(ptr, -, sizeof(SIZE_T)), size + sizeof(SIZE_T));
