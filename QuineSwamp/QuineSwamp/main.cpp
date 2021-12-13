@@ -286,8 +286,24 @@ VOID Debug(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ..
 VOID PrintHelp();
 VOID ParseCommandLine(INT argc, PCONST_CHAR * argv);
 
-#define OFFSET_(ptr, offset) ((VOID *)((CHAR *)ptr + offset))
-#define OFFSET(ptr, offset) OFFSET_(ptr, offset)
+#define OFFSET_(ptr, op, offset) ((VOID *)((CHAR *)ptr op offset))
+#define OFFSET(ptr, op, offset) OFFSET_(ptr, op, offset)
+
+inline VOID * Prev(VOID * ptr, SIZE_T size)
+{
+    char * tmp = (char *)ptr;
+    tmp -= size;
+    void * ret = tmp;
+    return ret;
+}
+
+inline VOID * Next(VOID * ptr, size_t size)
+{
+    char * tmp = (char *)ptr;
+    tmp += size;
+    void * ret = tmp;
+    return ret;
+}
 
 VOID * NativeMalloc(SIZE_T size)
 {
@@ -298,29 +314,34 @@ VOID * NativeMalloc(SIZE_T size)
     if (!tmp)
         return NULL;
     *(SIZE_T *)tmp = size;
-    memset(OFFSET(tmp, sizeof(SIZE_T)), 0, size);
-    return OFFSET(tmp, sizeof(SIZE_T));
+    memset(OFFSET(tmp, +, sizeof(SIZE_T)), 0, size);
+    return OFFSET(tmp, +, sizeof(SIZE_T));
 }
 
 VOID * NativeRealloc(VOID * ptr, SIZE_T size)
 {
     if (!size)
         return NULL;
-    if (size <= *(SIZE_T *)OFFSET(ptr, -sizeof(SIZE_T)))
+
+    char * test1 = (char *)ptr;
+    test1 -= sizeof(size_t);
+    void * test2 = test1;
+    size_t test3 = *(size_t*)test2;
+    if (size <= *(SIZE_T *)OFFSET(ptr, -, sizeof(SIZE_T)))
         return ptr;
-    VOID * tmp = realloc(OFFSET(ptr, -sizeof(SIZE_T)), size + sizeof(SIZE_T));
+    VOID * tmp = realloc(OFFSET(ptr, -, sizeof(SIZE_T)), size + sizeof(SIZE_T));
     if (!tmp)
         return NULL;
     *(SIZE_T *)tmp = size;
-    memset(OFFSET(tmp, sizeof(SIZE_T)), 0, size);
-    return OFFSET(tmp, sizeof(SIZE_T));
+    memset(OFFSET(tmp, +, sizeof(SIZE_T)), 0, size);
+    return OFFSET(tmp, +, sizeof(SIZE_T));
 }
 
 VOID NativeFree(VOID * ptr)
 {
     if (!ptr)
         return;
-    free(OFFSET(ptr, -sizeof(SIZE_T)));
+    free(OFFSET(ptr, -, sizeof(SIZE_T)));
 }
 
 UINT Random()
