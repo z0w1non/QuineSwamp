@@ -289,22 +289,6 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv);
 #define OFFSET_(ptr, op, offset) ((VOID *)((CHAR *)ptr op offset))
 #define OFFSET(ptr, op, offset) OFFSET_(ptr, op, offset)
 
-inline VOID * Prev(VOID * ptr, SIZE_T size)
-{
-    char * tmp = (char *)ptr;
-    tmp -= size;
-    void * ret = tmp;
-    return ret;
-}
-
-inline VOID * Next(VOID * ptr, size_t size)
-{
-    char * tmp = (char *)ptr;
-    tmp += size;
-    void * ret = tmp;
-    return ret;
-}
-
 VOID * NativeMalloc(SIZE_T size)
 {
     if (!size)
