@@ -1552,7 +1552,48 @@ VOID Debug(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ..
 
 VOID PrintHelp()
 {
-    fprintf(stdin, "");
+    printf("Alllowed options:\n");
+    printf("    -h : produce help message\n");
+    printf("    -d : debug assembly file\n");
+}
+
+BOOL EnabledOption(BOOL options[52], CHAR option)
+{
+    if (option >= 'a' && option <= 'z')
+        return options[option - 'a'];
+    else if (option >= 'A' && option <= 'Z')
+        return options[26 + option - 'A'];
+    else
+        return FALSE;
+}
+
+VOID ParseOptions(INT argc, PCONST_CHAR * argv, BOOL options[52])
+{
+    UINT i, j;
+    PCONST_CHAR p;
+    BOOL tempOptions[52];
+
+    memset(options, 0, 52);
+
+    for (i = 0; i < (UINT)argc; ++i)
+    {
+        if (argv[i][0] == '-')
+        {
+            memset(tempOptions, 0, 52);
+            for (p = argv[i] + 1; *p; ++p)
+            {
+                if (*p >= 'a' && *p <= 'z')
+                    tempOptions[*p - 'a'] = TRUE;
+                else if (*p >= 'A' && *p <= 'Z')
+                    tempOptions[26 + *p - 'A'] = TRUE;
+                else
+                    goto nextarg;
+            }
+            for (j = 0; i < 52; ++j)
+                options[j] |= tempOptions[j];
+        }
+    nextarg:;
+    }
 }
 
 VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
@@ -1561,6 +1602,7 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
     PASSEMBLY asm_;
     CHAR asmpath[MAX_PATH];
     PWORLD wld;
+    BOOL options[52];
 
     WORLD_PARAM param = {
         1000 * 1000 * 100,
@@ -1582,33 +1624,38 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
         return;
     }
 
-    if (argc % 2 != 1)
+    ParseOptions(argc, argv, options);
+
+    if (EnabledOption(options, 'h') || argc < 2)
     {
         PrintHelp();
         return;
     }
 
-    wld = World_Create(&param);
-
-    owner_number = (argc - 1) / 2;
-    for (owner = 0; owner < owner_number; ++owner)
+    if (EnabledOption(options, 'd'))
     {
-        strcpy(wld->owntbl->data[owner].name, argv[owner_number * 2]);
-        asm_ = Assembly_CreateFromFile(argv[owner_number * 2 + 1]);
-        if (asm_)
+        wld = World_Create(&param);
+
+        owner_number = (argc - 1) / 2;
+        for (owner = 0; owner < owner_number; ++owner)
         {
-            Assembly_Deploy(wld->mem, asm_, owner);
-            Assembly_Release(asm_);
+            strcpy(wld->owntbl->data[owner].name, argv[owner_number * 2]);
+            asm_ = Assembly_CreateFromFile(argv[owner_number * 2 + 1]);
+            if (asm_)
+            {
+                Assembly_Deploy(wld->mem, asm_, owner);
+                Assembly_Release(asm_);
+            }
         }
-    }
 
-    if (!World_Run(wld))
-    {
-        fprintf(stderr, "runtime error\n");
+        if (!World_Run(wld))
+        {
+            fprintf(stderr, "runtime error\n");
+        }
+
+        World_JudgeResult(wld);
+        World_Release(wld);
     }
-    
-    World_JudgeResult(wld);
-    World_Release(wld);
 }
 
 INT main(INT argc, PCONST_CHAR * argv)
