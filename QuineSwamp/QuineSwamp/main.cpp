@@ -234,23 +234,6 @@ BOOL ReplaceExtension(PCONST_CHAR source, PCHAR replaced, PCONST_CHAR extension)
 BOOL GetAssemblyFilePath(PCONST_CHAR source, PCHAR destination);
 BOOL GetLogFilePath(PCONST_CHAR source, PCHAR destination);
 
-PSTRING String_Create(PCONST_CHAR s);
-VOID String_Release(PSTRING str);
-BOOL String_Reserve(PSTRING str, UINT reserve);
-PCHAR String_Data(PSTRING str);
-UINT String_Size(PSTRING str);
-BOOL String_Copy(PSTRING dst, PSTRING src);
-BOOL String_CopyCStr(PSTRING dst, PCONST_CHAR src);
-BOOL String_Cat(PSTRING dst, PSTRING src);
-UINT String_Comapre(PCONST_STRING dst, PCONST_STRING src);
-UINT String_ICompare(PCONST_STRING dst, PCONST_STRING src);
-
-PVECTOR Vector_Create();
-VOID Vector_Release(PVECTOR vct);
-BOOL Vector_Reserve(PVECTOR vct, UINT reserve);
-PVOID Vector_Data(PVECTOR vct);
-PUINT Vector_Size(PVECTOR vct);
-
 PCHAR Tokens_CreateFromFile(PCONST_CHAR file);
 VOID Tokens_Release(PCHAR tokens);
 
