@@ -66,6 +66,7 @@ enum INSTRUCTION
     RESERVE,
     MALLOC ,
     ADDR   ,
+    SIZE   ,
     INSTRUCTION_NUMBER
 };
 
@@ -974,6 +975,12 @@ BOOL ADDR_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
     return TRUE;
 }
 
+BOOL SIZE_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
+{
+    prcs->rgst = prcs->size;
+    Processor_IncreceProgramCounter(prcs, 1);
+    return TRUE;
+}
 
 INSTRUCTION_INFO instruction_info_table[] = {
 #define DECLARE_INSTRUCTION_INFO(s) {TO_STRING(s), s, s##_}
@@ -1002,7 +1009,8 @@ INSTRUCTION_INFO instruction_info_table[] = {
     DECLARE_INSTRUCTION_INFO(RET    ),
     DECLARE_INSTRUCTION_INFO(RESERVE),
     DECLARE_INSTRUCTION_INFO(MALLOC ),
-    DECLARE_INSTRUCTION_INFO(ADDR   )
+    DECLARE_INSTRUCTION_INFO(ADDR   ),
+    DECLARE_INSTRUCTION_INFO(SIZE   ),
 #undef DECLARE_INSTRUCTION_INFO
 };
 
@@ -1657,6 +1665,7 @@ INT main(INT argc, PCONST_CHAR * argv)
     RESERVE: ポインタが指すメモリの値(1バイト)を、次回 MALLOC を実行したときにメモリに配置されるプログラムの末尾に追加する。
     MALLOC : RESERVE により蓄積されたデータを割り当てられたメモリに配置し、プロセッサを割り当てる。
     ADDR   : レジスタの値をプロセッサが割り当てられているメモリの先頭の絶対アドレスに変更する。
+    SIZE   : レジスタの値をプロセッサが割り当てられているメモリのサイズに変更する。
 
 プロセッサの計算において値がアドレスとして解釈される場合、
 そのアドレスはプロセッサが割り当てられているメモリに配置されたプログラムの先頭のアドレスを基準とした相対アドレスとして解釈される。
