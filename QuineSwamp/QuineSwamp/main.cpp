@@ -492,8 +492,11 @@ BOOL Processor_Step(PPROCESSOR prcs, PMEMORY mem, PPROCESSOR_TABLE prcst)
     UINT code;
     code = *Memory_Data(mem, prcs->pc);
     if (code < INSTRUCTION_NUMBER)
+    {
+        DEBUG("PID:%d %s\n", prcs->pid, CodeToMnemonic(code));
         if (!CodeToImpl(code)(mem, prcst, prcs))
             return FALSE;
+    }
     ++prcs->used;
     return TRUE;
 }
@@ -641,12 +644,31 @@ BOOL OwnerTable_AddName(POWNER_TABLE owntbl, PCONST_CHAR name)
 
 PWORLD World_Create(PWORLD_PARAM param)
 {
-    PWORLD wld = (PWORLD)NativeMalloc(sizeof(WORLD));
+    PWORLD wld;
+
+    wld = (PWORLD)NativeMalloc(sizeof(WORLD));
+    if (!wld)
+        goto error;
+
     wld->mem = Memory_Create(param->memory_size);
+    if (!wld->mem)
+        goto error;
+
     wld->prcst = ProcessorTable_Create(param->processor_number);
+    if (!wld->prcst)
+        goto error;
+
     wld->tick_number = param->tick_number;
+
     wld->owntbl = OwnerTable_Create(param->owner_number);
+    if (!wld->owntbl)
+        goto error;
+
     return wld;
+
+error:
+    World_Release(wld);
+    return NULL;
 }
 
 VOID World_Release(PWORLD wld)
