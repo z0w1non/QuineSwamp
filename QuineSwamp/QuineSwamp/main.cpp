@@ -28,7 +28,7 @@ typedef size_t SIZE_T;
 #ifdef NDEBUG
     #define DEBUG(...)
 #else
-    #define DEBUG_(file, func, line, ...) Debug(file, func, line, __VA_ARGS__)
+    #define DEBUG_(file, func, line, ...) DebugImpl(file, func, line, __VA_ARGS__)
     #define DEBUG(...) DEBUG_(__FILE__, __func__, __LINE__, __VA_ARGS__)
 #endif
 
@@ -107,7 +107,7 @@ typedef struct PROCESSOR_
     UINT    pc;
     UINT    sp;
     UINT    ptr;
-    UINT    rgst;
+    UINT    acc;
     UINT    tmp;
     UINT    rsv;
     UINT    rsvmax;
@@ -254,7 +254,6 @@ BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size);
 PASSEMBLY Assembly_AssembleFromFile(PCONST_CHAR file);
 PASSEMBLY Assembly_ReadAssembledFile(PCONST_CHAR file);
 VOID Assembly_Release(PASSEMBLY asm_);
-VOID Assembly_Deploy(PMEMORY mem, PASSEMBLY asm_, UINT owner);
 BOOL Assembly_CreateFile(PASSEMBLY asm_, PCONST_CHAR path);
 
 INT ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b);
@@ -265,7 +264,11 @@ VOID StringUIntMap_Release(PSTRING_UINT_MAP suimap);
 BOOL StringUIntMap_Add(PSTRING_UINT_MAP suimap, PCONST_CHAR s, UINT ui);
 BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, PCONST_CHAR s, PUINT ui);
 
-VOID Debug(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ...);
+BOOL debug;
+VOID Debug(PCONST_CHAR format, ...);
+VOID DebugImpl(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ...);
+
+VOID DumpMemory(PMEMORY mem, UINT addr, UINT size);
 VOID PrintHelp();
 
 BOOL Options_EnabledOption(POPTIONS options, CHAR option);
@@ -409,7 +412,7 @@ BOOL InitMemoryAndProcesserPrimary(PMEMORY mem, PPROCESSOR_TABLE prcst, BYTE own
     prcs->pc = 0;
     prcs->sp = size;
     prcs->ptr = 0;
-    prcs->rgst = 0;
+    prcs->acc = 0;
     prcs->tmp = 0;
     prcs->rsv = 0;
     prcs->rsvmax = DEFAULT_RESERVE_MAX;
@@ -446,7 +449,7 @@ BOOL InitMemoryAndProcesserSecondary(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCE
     prcs->pc = 0;
     prcs->sp = parent->rsv;
     prcs->ptr = 0;
-    prcs->rgst = 0;
+    prcs->acc = 0;
     prcs->tmp = 0;
     prcs->rsv = 0;
     prcs->rsvmax = DEFAULT_RESERVE_MAX;
@@ -489,11 +492,11 @@ VOID Processor_DecreceProgramCounter(PPROCESSOR prcs)
 
 BOOL Processor_Step(PPROCESSOR prcs, PMEMORY mem, PPROCESSOR_TABLE prcst)
 {
-    UINT code;
-    code = *Memory_Data(mem, prcs->pc);
+    BYTE code;
+    code = *Memory_Data(mem, prcs->addr + prcs->pc);
     if (code < INSTRUCTION_NUMBER)
     {
-        DEBUG("PID:%d %s\n", prcs->pid, CodeToMnemonic(code));
+        Debug("PID=0x%02x %s\n", prcs->pid, CodeToMnemonic(code));
         if (!CodeToImpl(code)(mem, prcst, prcs))
             return FALSE;
     }
@@ -503,16 +506,17 @@ BOOL Processor_Step(PPROCESSOR prcs, PMEMORY mem, PPROCESSOR_TABLE prcst)
 
 VOID Processor_Dump(PPROCESSOR prcs)
 {
-    printf("pid  : 0x%08x\n", prcs->pid    );
-    printf("addr : 0x%08x\n", prcs->addr   );
-    printf("size : 0x%08x\n", prcs->size   );
-    printf("pc   : 0x%08x\n", prcs->pc     );
-    printf("sp   : 0x%08x\n", prcs->sp     );
-    printf("ptr  : 0x%08x\n", prcs->ptr    );
-    printf("rgst : 0x%08x\n", prcs->rgst   );
-    printf("tmp  : 0x%08x\n", prcs->tmp    );
-    printf("rsv  : 0x%08x\n", prcs->rsv    );
-    printf("owner: 0x%08x\n", prcs->owner  );
+    printf("PID  : 0x%08X\n", prcs->pid    );
+    printf("ADDR : 0x%08X\n", prcs->addr   );
+    printf("SIZE : 0x%08X\n", prcs->size   );
+    printf("PC   : 0x%08X\n", prcs->pc     );
+    printf("SP   : 0x%08X\n", prcs->sp     );
+    printf("PTR  : 0x%08X\n", prcs->ptr    );
+    printf("ACC  : 0x%08X\n", prcs->acc    );
+    printf("TMP  : 0x%08X\n", prcs->tmp    );
+    printf("RSV  : 0x%08X\n", prcs->rsv    );
+    printf("OWNER: 0x%08X\n", prcs->owner  );
+    printf("USED : 0x%08X\n", prcs->used   );
 }
 
 PBYTE Memory_Data(PMEMORY mem, UINT addr)
@@ -550,14 +554,15 @@ BOOL FindFreeMemoryAndProcessor(PMEMORY mem, PPROCESSOR_TABLE prcst, UINT size, 
                 {
                     Memory_Init(mem, i, size);
                     *addr = i;
+                    DEBUG("free memory found (addr=0x%08X size=0x%08X)\n", i, tmp);
+                    goto found;
                 }
                 i += tmp;
             }
             else
-            {
                 ++i;
-            }
         }
+        found:
         *prcs = ProcesserQueue_ReleaseOldest(mem, prcst);
     }
 
@@ -689,16 +694,16 @@ VOID World_JudgeResult(PWORLD wld)
 
     pairs = (PSCORE_OWNER_PAIR)NativeMalloc(wld->owntbl->size * sizeof(SCORE_OWNER_PAIR));
 
-    for (i = 0; i < wld->owntbl->size; ++i)
+    for (i = 0; i < wld->owntbl->number; ++i)
         pairs[i].owner = i + USER;
 
     for (i = 0; i < wld->prcst->size; ++i)
         if (wld->prcst->data[i].owner != SYSTEM)
             pairs[wld->prcst->data[i].owner - USER].score += wld->prcst->data[i].size;
 
-    qsort(pairs, wld->owntbl->size, sizeof(SCORE_OWNER_PAIR), ScoreOwnerPairComparator);
+    qsort(pairs, wld->owntbl->number, sizeof(SCORE_OWNER_PAIR), ScoreOwnerPairComparator);
 
-    for (i = 0; i < wld->owntbl->size; ++i)
+    for (i = 0; i < wld->owntbl->number; ++i)
         printf("%d%s %s (%d)\n", i + 1, SuffixString(i + 1), OwnerTable_GetName(wld->owntbl, pairs[i].owner), pairs[i].score);
 
     NativeFree(pairs);
@@ -737,7 +742,7 @@ BOOL Memory_Read(PMEMORY mem, PPROCESSOR prcs, UINT localaddr, PBYTE data)
 
 BOOL Memory_OutOfMemory(PMEMORY mem, UINT addr)
 {
-    return mem->size >= addr;
+    return addr >= mem->size;
 }
 
 BOOL NOP_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
@@ -748,56 +753,64 @@ BOOL NOP_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 
 BOOL SEEK_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->ptr = prcs->rgst;
+    prcs->ptr = prcs->acc;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL ADD_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst += prcs->tmp;
+    prcs->acc += prcs->tmp;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL SUB_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst -= prcs->tmp;
+    prcs->acc -= prcs->tmp;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL AND_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst &= prcs->tmp;
+    prcs->acc &= prcs->tmp;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL OR_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst |= prcs->tmp;
+    prcs->acc |= prcs->tmp;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL XOR_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst ^= prcs->tmp;
+    prcs->acc ^= prcs->tmp;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL NOT_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst = (prcs->rgst != 0) ? 0 : ~0;
+    prcs->acc = (prcs->acc != 0) ? 0 : ~0;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL SLA_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst = (prcs->tmp << prcs->rgst) & ~1;
+    prcs->acc = (prcs->tmp << prcs->acc) & ~1;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -805,22 +818,25 @@ BOOL SLA_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 BOOL SRA_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
     UINT msb;
-    msb = prcs->rgst & 0x80000000;
-    prcs->rgst = (prcs->tmp >> prcs->rgst) | msb;
+    msb = prcs->acc & 0x80000000;
+    prcs->acc = (prcs->tmp >> prcs->acc) | msb;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL SLL_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst = (prcs->tmp << prcs->rgst) & 0x8FFFFFFF;
+    prcs->acc = (prcs->tmp << prcs->acc) & 0x8FFFFFFF;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL SRL_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst = (prcs->tmp >> prcs->rgst) & ~1;
+    prcs->acc = (prcs->tmp >> prcs->acc) & ~1;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -840,7 +856,8 @@ BOOL READ_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
         }
         value |= data << (8 * i);
     }
-    prcs->rgst = value;
+    prcs->acc = value;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
 
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
@@ -853,7 +870,7 @@ BOOL WRITE_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 
     for (i = 0; i < sizeof(UINT); ++i)
     {
-        data = (BYTE)(prcs->rgst >> (8 * i));
+        data = (BYTE)(prcs->acc >> (8 * i));
         if (!Memory_Write(mem, prcs, prcs->ptr, data))
         {
             prcs->pc = 0;
@@ -867,7 +884,8 @@ BOOL WRITE_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 
 BOOL SAVE_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->tmp = prcs->rgst;
+    prcs->tmp = prcs->acc;
+    Debug("TMP -> 0x%08X\n", prcs->tmp);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -876,8 +894,10 @@ BOOL SWAP_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
     UINT tmp;
     tmp = prcs->tmp;
-    prcs->tmp = prcs->rgst;
-    prcs->rgst = tmp;
+    prcs->tmp = prcs->acc;
+    prcs->acc = tmp;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
+    Debug("TMP -> 0x%08X\n", prcs->tmp);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -897,14 +917,16 @@ BOOL SET_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
         }
         value |= data << (i * 8);
     }
-    prcs->rgst = value;
+    prcs->acc = value;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1 + sizeof(UINT));
     return TRUE;
 }
 
 BOOL JMP_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->pc = prcs->rgst;
+    prcs->pc = prcs->acc;
+    Debug("PC -> 0x%08X\n", prcs->pc);
     Processor_RoundProgramCounter(prcs);
     return TRUE;
 }
@@ -912,7 +934,8 @@ BOOL JMP_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 BOOL JEZ_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
     if (prcs->tmp == 0)
-        prcs->pc = prcs->rgst;
+        prcs->pc = prcs->acc;
+    Debug("PC -> 0x%08X\n", prcs->pc);
     Processor_RoundProgramCounter(prcs);
     return TRUE;
 }
@@ -920,11 +943,13 @@ BOOL JEZ_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 BOOL PUSH_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
     --prcs->sp;
-    if (!Memory_Write(mem, prcs, prcs->sp, prcs->rgst))
+    if (!Memory_Write(mem, prcs, prcs->sp, prcs->acc))
     {
         prcs->pc = 0;
         return TRUE;
     }
+    Debug("PC -> 0x%08X\n", prcs->pc);
+    Debug("SP -> 0x%08X\n", prcs->sp);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -937,8 +962,10 @@ BOOL POP_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
         prcs->pc = 0;
         return TRUE;
     }
-    prcs->rgst = data;
+    prcs->acc = data;
     ++prcs->sp;
+    Debug("PC -> 0x%08X\n", prcs->pc);
+    Debug("SP -> 0x%08X\n", prcs->sp);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -963,6 +990,8 @@ BOOL CALL_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
         return TRUE;
     }
     prcs->pc = data;
+    Debug("PC -> 0x%08X\n", prcs->pc);
+    Debug("SP -> 0x%08X\n", prcs->sp);
     return TRUE;
 }
 
@@ -976,6 +1005,8 @@ BOOL RET_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
     }
     prcs->pc = data;
     ++prcs->sp;
+    Debug("PC -> 0x%08X\n", prcs->pc);
+    Debug("SP -> 0x%08X\n", prcs->sp);
     Processor_RoundProgramCounter(prcs);
     return TRUE;
 }
@@ -997,6 +1028,7 @@ BOOL RESERVE_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
         prcs->rsvptr[prcs->rsv] = data;
     }
     ++prcs->rsv;
+    Debug("RSV -> 0x%08X\n", prcs->rsv);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -1008,20 +1040,23 @@ BOOL MALLOC_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
         InitMemoryAndProcesserSecondary(mem, prcst, prcs);
         prcs->rsv = 0;
     }
+    Debug("RSV -> 0x%08X\n", prcs->rsv);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL ADDR_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst = prcs->addr;
+    prcs->acc = prcs->addr;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
 BOOL SIZE_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
 {
-    prcs->rgst = prcs->size;
+    prcs->acc = prcs->size;
+    Debug("ACC -> 0x%08X\n", prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -1382,7 +1417,7 @@ PASSEMBLY Assembly_AssembleFromFile(PCONST_CHAR file)
 
         if (strcmp(next_token, ":") == 0 && IsLabel(token))
         {
-            DEBUG("label \"%s\" 0x%08x\n", token, asm_->size);
+            DEBUG("label \"%s\" 0x%08X\n", token, asm_->size);
             if (StringUIntMap_Find(label_to_address, token, NULL))
                 fprintf(stderr, "already declared label \"%s\"\n", token);
             else if (!StringUIntMap_Add(label_to_address, token, asm_->size))
@@ -1392,7 +1427,7 @@ PASSEMBLY Assembly_AssembleFromFile(PCONST_CHAR file)
         }
         else if (StringUIntMap_Find(label_to_address, token, &value) || StringToUint(token, &value))
         {
-            DEBUG("value 0x%08x\n", value);
+            DEBUG("value 0x%08X\n", value);
             if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
                 goto cleanup;
             WriteUInt(&asm_->data[asm_->size], value);
@@ -1433,12 +1468,12 @@ PASSEMBLY Assembly_AssembleFromFile(PCONST_CHAR file)
         if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
             goto cleanup; 
         WriteUInt(&asm_->data[pending_label->data[i].addr], value);
-        DEBUG("pending label \"%s\" 0x%08x is resolved to 0x%08x\n", pending_label->data[i].label, pending_label->data[i].addr, value);
+        DEBUG("pending label \"%s\" 0x%08X is resolved to 0x%08X\n", pending_label->data[i].label, pending_label->data[i].addr, value);
     }
 
     for (i = 0; i < label_to_address->size; ++i)
     {
-        DEBUG("label \"%s\" 0x%08x\n", label_to_address->data[i].label, label_to_address->data[i].addr);
+        DEBUG("label \"%s\" 0x%08X\n", label_to_address->data[i].label, label_to_address->data[i].addr);
     }
 
     valid = TRUE;
@@ -1517,17 +1552,6 @@ VOID Assembly_Release(PASSEMBLY asm_)
     {
         NativeFree(asm_->data);
         NativeFree(asm_);
-    }
-}
-
-VOID Assembly_Deploy(PMEMORY mem, PASSEMBLY asm_, UINT owner)
-{
-    UINT i;
-
-    for (i = 0; i < asm_->size; ++i)
-    {
-        *Memory_Data(mem, i) = asm_->data[i];
-        *Memory_Owner(mem, i) = owner;
     }
 }
 
@@ -1632,7 +1656,17 @@ BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, PCONST_CHAR s, PUINT ui)
     return FALSE;
 }
 
-VOID Debug(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ...)
+VOID Debug(PCONST_CHAR format, ...)
+{
+    if (!debug)
+        return;
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+}
+
+VOID DebugImpl(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ...)
 {
     va_list args;
     va_start(args, format);
@@ -1641,6 +1675,17 @@ VOID Debug(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ..
     vprintf(format, args);
 
     va_end(args);
+}
+
+VOID DumpMemory(PMEMORY mem, UINT addr, UINT size)
+{
+    UINT i;
+    BYTE code;
+    for (i = 0; i < size; ++i)
+    {
+        code = *Memory_Data(mem, addr + i);
+        DEBUG("0x%08X 0x%02x (%s)", addr + i, code, CodeToMnemonic(code));
+    }
 }
 
 VOID PrintHelp()
@@ -1706,14 +1751,13 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
     OPTIONS options;
 
     WORLD_PARAM param = {
-        1000 * 1000 * 100, // memory_size
-        100,               // processor_number
-        1000 * 1000,       // tick_number
-        4                  // owner_number
+        1000,           // memory_size
+        100,            // processor_number
+        1000 * 10,      // tick_number
+        4               // owner_number
     };
 
     memset(asmpath, 0, sizeof(asmpath));
-
 
     Options_ParseCommandLine(&options, argc, argv);
 
@@ -1742,6 +1786,7 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
 
     if (Options_EnabledOption(&options, 'd'))
     {
+        debug = TRUE;
         wld = World_Create(&param);
 
         for (i = 1; i < (UINT)argc; ++i)
@@ -1754,7 +1799,7 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
                 asm_ = Assembly_ReadAssembledFile(argv[i]);
                 if (asm_)
                 {
-                    Assembly_Deploy(wld->mem, asm_, wld->owntbl->number);
+                    InitMemoryAndProcesserPrimary(wld->mem, wld->prcst, wld->owntbl->number, asm_->data, asm_->size);
                     Assembly_Release(asm_);
                 }
             }
@@ -1787,11 +1832,11 @@ INT main(INT argc, PCONST_CHAR * argv)
 
 プロセッサは以下の要素から構成される。
 
-    プログラムカウンタ
-    ポインタ
-    レジスタ
-    テンポラリレジスタ
-    スタックポインタ
+    プログラムカウンタ(PC)
+    ポインタ(PTR)
+    レジスタ(ACC)
+    テンポラリレジスタ(TMP)
+    スタックポインタ(SP)
 
 プログラムがメモリに配置されるとき、配置されたプログラムにプロセッサが割り当てられる。
 プロセッサのプログラムカウンタとポインタは配置されたコードの先頭のアドレスに設定され、
