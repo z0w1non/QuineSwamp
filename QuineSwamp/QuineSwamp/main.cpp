@@ -32,6 +32,9 @@ typedef size_t SIZE_T;
     #define DEBUG(...) DEBUG_(__FILE__, __func__, __LINE__, __VA_ARGS__)
 #endif
 
+#define OFFSET_(ptr, op, offset) ((VOID *)((CHAR *)ptr op offset))
+#define OFFSET(ptr, op, offset) OFFSET_(ptr, op, offset)
+
 enum
 {
     SYSTEM = 0,
@@ -87,8 +90,6 @@ enum INSTRUCTION
     FORWARD_DECLARATION(VECTOR          );
 #undef FORWARD_DECLARATION
 
-typedef CONST PSTRING PCONST_STRING;
-
 typedef struct MEMORY_
 {
     UINT    size;
@@ -127,6 +128,7 @@ typedef struct OWNER_
 
 typedef struct OWNER_TABLE_
 {
+    UINT   number;
     UINT   size;
     POWNER data;
 } OWNER_TABLE, * POWNER_TABLE;
@@ -181,6 +183,11 @@ typedef struct STRING_UINT_MAP_
     PSTRING_UINT_PAIR data;
 } STRING_UINT_MAP, * PSTRING_UINT_MAP;
 
+typedef struct OPTIONS_
+{
+    BOOL options[52];
+} OPTIONS, * POPTIONS;
+
 VOID * NativeMalloc(SIZE_T size);
 VOID * NativeRealloc(VOID * ptr, SIZE_T size);
 VOID NativeFree(VOID * ptr);
@@ -213,7 +220,8 @@ VOID Memory_Release(PMEMORY mem);
 
 POWNER_TABLE OwnerTable_Create(UINT size);
 VOID OwnerTable_Release(POWNER_TABLE owntbl);
-PCONST_CHAR OwnerTable_Name(POWNER_TABLE owntbl, UINT owner);
+PCONST_CHAR OwnerTable_GetName(POWNER_TABLE owntbl, UINT owner);
+BOOL OwnerTable_AddName(POWNER_TABLE owntbl, PCONST_CHAR name);
 
 PWORLD World_Create(PWORLD_PARAM param);
 VOID World_Release(PWORLD wld);
@@ -233,6 +241,7 @@ BOOL IsLabel(PCONST_CHAR s);
 UINT ReadUInt(PBYTE destination);
 VOID WriteUInt(PBYTE destination, UINT value);
 BOOL ReplaceExtension(PCONST_CHAR source, PCHAR replaced, PCONST_CHAR extension);
+BOOL GetBaseName(PCONST_CHAR source, PCHAR destination);
 BOOL GetAssemblyFilePath(PCONST_CHAR source, PCHAR destination);
 BOOL GetLogFilePath(PCONST_CHAR source, PCHAR destination);
 
@@ -255,10 +264,11 @@ BOOL StringUIntMap_Find(PSTRING_UINT_MAP suimap, PCONST_CHAR s, PUINT ui);
 
 VOID Debug(PCONST_CHAR file, PCONST_CHAR func, UINT line, PCONST_CHAR format, ...);
 VOID PrintHelp();
-VOID ParseCommandLine(INT argc, PCONST_CHAR * argv);
 
-#define OFFSET_(ptr, op, offset) ((VOID *)((CHAR *)ptr op offset))
-#define OFFSET(ptr, op, offset) OFFSET_(ptr, op, offset)
+BOOL Options_EnabledOption(POPTIONS options, CHAR option);
+VOID Options_ParseCommandLine(POPTIONS options, INT argc, PCONST_CHAR * argv);
+
+VOID ParseCommandLine(INT argc, PCONST_CHAR * argv);
 
 VOID * NativeMalloc(SIZE_T size)
 {
@@ -612,9 +622,17 @@ VOID OwnerTable_Release(POWNER_TABLE owntbl)
     }
 }
 
-PCONST_CHAR OwnerTable_Name(POWNER_TABLE owntbl, UINT owner)
+PCONST_CHAR OwnerTable_GetName(POWNER_TABLE owntbl, UINT owner)
 {
     return owntbl->data[owner - USER].name;
+}
+
+BOOL OwnerTable_AddName(POWNER_TABLE owntbl, PCONST_CHAR name)
+{
+    if (owntbl->number >= owntbl->size)
+        return FALSE;
+    strcpy(owntbl->data[owntbl->number++].name, name);
+    return TRUE;
 }
 
 PWORLD World_Create(PWORLD_PARAM param)
@@ -655,7 +673,7 @@ VOID World_JudgeResult(PWORLD wld)
     qsort(pairs, wld->owntbl->size, sizeof(SCORE_OWNER_PAIR), ScoreOwnerPairComparator);
 
     for (i = 0; i < wld->owntbl->size; ++i)
-        printf("%d%s %s (%d)\n", i + 1, SuffixString(i + 1), OwnerTable_Name(wld->owntbl, pairs[i].owner), pairs[i].score);
+        printf("%d%s %s (%d)\n", i + 1, SuffixString(i + 1), OwnerTable_GetName(wld->owntbl, pairs[i].owner), pairs[i].score);
 
     NativeFree(pairs);
 }
@@ -1138,6 +1156,11 @@ BOOL ReplaceExtension(PCONST_CHAR source, PCHAR replaced, PCONST_CHAR extension)
     return TRUE;
 }
 
+BOOL GetBaseName(PCONST_CHAR source, PCHAR destination)
+{
+    return ReplaceExtension(source, destination, "");
+}
+
 BOOL GetAssemblyFilePath(PCONST_CHAR source, PCHAR destination)
 {
     return ReplaceExtension(source, destination, ".qs");
@@ -1557,52 +1580,60 @@ VOID PrintHelp()
     printf("    -d : debug assembly file\n");
 }
 
-BOOL EnabledOption(BOOL options[52], CHAR option)
+BOOL Options_EnabledOption(POPTIONS options, CHAR option)
 {
     if (option >= 'a' && option <= 'z')
-        return options[option - 'a'];
+        return options->options[option - 'a'];
     else if (option >= 'A' && option <= 'Z')
-        return options[26 + option - 'A'];
+        return options->options[26 + option - 'A'];
     else
         return FALSE;
 }
 
-VOID ParseOptions(INT argc, PCONST_CHAR * argv, BOOL options[52])
+BOOL Options_ParseArgment(POPTIONS options, PCONST_CHAR arg)
 {
-    UINT i, j;
+    UINT i;
     PCONST_CHAR p;
     BOOL tempOptions[52];
 
-    memset(options, 0, 52);
+    if (arg[0] != '-')
+        return FALSE;
 
-    for (i = 0; i < (UINT)argc; ++i)
+    if (options)
+        memset(tempOptions, 0, 52);
+    
+    for (p = arg + 1; *p; ++p)
     {
-        if (argv[i][0] == '-')
-        {
-            memset(tempOptions, 0, 52);
-            for (p = argv[i] + 1; *p; ++p)
-            {
-                if (*p >= 'a' && *p <= 'z')
-                    tempOptions[*p - 'a'] = TRUE;
-                else if (*p >= 'A' && *p <= 'Z')
-                    tempOptions[26 + *p - 'A'] = TRUE;
-                else
-                    goto nextarg;
-            }
-            for (j = 0; i < 52; ++j)
-                options[j] |= tempOptions[j];
-        }
-    nextarg:;
+        if (*p >= 'a' && *p <= 'z')
+            tempOptions[*p - 'a'] = TRUE;
+        else if (*p >= 'A' && *p <= 'Z')
+            tempOptions[26 + *p - 'A'] = TRUE;
+        else
+            return FALSE;
     }
+    
+    if (options)
+        for (i = 0; i < 52; ++i)
+            options->options[i] |= tempOptions[i];
+
+    return TRUE;
+}
+
+VOID Options_ParseCommandLine(POPTIONS options, INT argc, PCONST_CHAR * argv)
+{
+    UINT i;
+    memset(options, 0, sizeof(*options));
+    for (i = 0; i < (UINT)argc; ++i)
+        Options_ParseArgment(options, argv[i]);
 }
 
 VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
 {
-    UINT owner, owner_number;
+    UINT i;
     PASSEMBLY asm_;
-    CHAR asmpath[MAX_PATH];
+    CHAR asmpath[MAX_PATH], basename[MAX_PATH];
     PWORLD wld;
-    BOOL options[52];
+    OPTIONS options;
 
     WORLD_PARAM param = {
         1000 * 1000 * 100,
@@ -1624,27 +1655,31 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
         return;
     }
 
-    ParseOptions(argc, argv, options);
+    Options_ParseCommandLine(&options, argc, argv);
 
-    if (EnabledOption(options, 'h') || argc < 2)
+    if (Options_EnabledOption(&options, 'h') || argc < 2)
     {
         PrintHelp();
         return;
     }
 
-    if (EnabledOption(options, 'd'))
+    if (Options_EnabledOption(&options, 'd'))
     {
         wld = World_Create(&param);
 
-        owner_number = (argc - 1) / 2;
-        for (owner = 0; owner < owner_number; ++owner)
+        for (i = 1; i < (UINT)argc; ++i)
         {
-            strcpy(wld->owntbl->data[owner].name, argv[owner_number * 2]);
-            asm_ = Assembly_CreateFromFile(argv[owner_number * 2 + 1]);
-            if (asm_)
+            if (!Options_ParseArgment(NULL, argv[i]))
             {
-                Assembly_Deploy(wld->mem, asm_, owner);
-                Assembly_Release(asm_);
+                memset(basename, 0, sizeof(basename));
+                GetBaseName(argv[i], basename);
+                OwnerTable_AddName(wld->owntbl, basename);
+                asm_ = Assembly_CreateFromFile(argv[i]);
+                if (asm_)
+                {
+                    Assembly_Deploy(wld->mem, asm_, wld->owntbl->number);
+                    Assembly_Release(asm_);
+                }
             }
         }
 
