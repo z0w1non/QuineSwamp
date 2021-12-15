@@ -35,6 +35,8 @@ typedef size_t SIZE_T;
 #define OFFSET_(ptr, op, offset) ((VOID *)((CHAR *)ptr op offset))
 #define OFFSET(ptr, op, offset) OFFSET_(ptr, op, offset)
 
+#define DEFAULT_ASSEMBLY_SIZE 1024
+
 enum
 {
     SYSTEM = 0,
@@ -249,7 +251,8 @@ PCHAR Tokens_CreateFromFile(PCONST_CHAR file);
 VOID Tokens_Release(PCHAR tokens);
 
 BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size);
-PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file);
+PASSEMBLY Assembly_AssembleFromFile(PCONST_CHAR file);
+PASSEMBLY Assembly_ReadAssembledFile(PCONST_CHAR file);
 VOID Assembly_Release(PASSEMBLY asm_);
 VOID Assembly_Deploy(PMEMORY mem, PASSEMBLY asm_, UINT owner);
 BOOL Assembly_CreateFile(PASSEMBLY asm_, PCONST_CHAR path);
@@ -1303,9 +1306,8 @@ typedef struct UINT_UINT_PAIR_
     UINT a, b;
 } UINT_UINT_PAIR, * PUINT_UINT_PAIR;
 
-PASSEMBLY Assembly_CreateFromFile(PCONST_CHAR file)
+PASSEMBLY Assembly_AssembleFromFile(PCONST_CHAR file)
 {
-#define DEFAULT_ASSEMBLY_SIZE 1024
 #define LINE_LENGTH_FORMAT 1024
 #define LINE_LENGTH (LINE_LENGTH_FORMAT + 1)
 
@@ -1438,8 +1440,53 @@ cleanup:
 
 #undef LINE_LENGTH
 #undef LINE_LENGTH_FORMAT
-#undef DEFAULT_ASSEMBLY_SIZE
 }
+
+PASSEMBLY Assembly_ReadAssembledFile(PCONST_CHAR file)
+{
+    FILE * fp;
+    PASSEMBLY asm_;
+    INT c;
+    BOOL valid;
+
+    fp = fopen(file, "rb");
+
+    if (!fp)
+        return NULL;
+
+    valid = FALSE;
+
+    asm_ = (PASSEMBLY)NativeMalloc(sizeof(ASSEMBLY));
+    if (!asm_)
+        goto cleanup;
+
+    asm_->data = (PBYTE)NativeMalloc(sizeof(BYTE) * DEFAULT_ASSEMBLY_SIZE);
+    asm_->maxsize = DEFAULT_ASSEMBLY_SIZE;
+    if (!asm_->data)
+        goto cleanup;
+
+    while ((c = fgetc(fp)) != EOF)
+    {
+        if (!Assembly_Reserve(asm_, asm_->size + 1))
+            goto cleanup;
+        asm_->data[asm_->size] = (BYTE)(UINT)c;
+        ++asm_->size;
+    }
+
+    valid = TRUE;
+
+cleanup:
+    fclose(fp);
+
+    if (!valid)
+    {
+        Assembly_Release(asm_);
+        return NULL;
+    }
+
+    return asm_;
+}
+
 
 VOID Assembly_Release(PASSEMBLY asm_)
 {
@@ -1643,9 +1690,12 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
 
     memset(asmpath, 0, sizeof(asmpath));
 
-    if (argc == 2)
+
+    Options_ParseCommandLine(&options, argc, argv);
+
+    if (argc == 2 && !Options_ParseArgment(NULL, argv[1]))
     {
-        PASSEMBLY asm_ = Assembly_CreateFromFile(argv[1]);
+        PASSEMBLY asm_ = Assembly_AssembleFromFile(argv[1]);
         if (asm_)
         {
             memset(asmpath, 0, sizeof(asmpath));
@@ -1654,8 +1704,6 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
         }
         return;
     }
-
-    Options_ParseCommandLine(&options, argc, argv);
 
     if (Options_EnabledOption(&options, 'h') || argc < 2)
     {
@@ -1674,7 +1722,7 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
                 memset(basename, 0, sizeof(basename));
                 GetBaseName(argv[i], basename);
                 OwnerTable_AddName(wld->owntbl, basename);
-                asm_ = Assembly_CreateFromFile(argv[i]);
+                asm_ = Assembly_ReadAssembledFile(argv[i]);
                 if (asm_)
                 {
                     Assembly_Deploy(wld->mem, asm_, wld->owntbl->number);
