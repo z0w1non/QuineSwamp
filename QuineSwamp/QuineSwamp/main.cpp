@@ -1700,7 +1700,12 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
         {
             memset(asmpath, 0, sizeof(asmpath));
             if (GetAssemblyFilePath(argv[1], asmpath))
-                Assembly_CreateFile(asm_, asmpath);
+            {
+                if (Assembly_CreateFile(asm_, asmpath))
+                    fprintf(stdout, "Assemble succseed\n");
+                else
+                    fprintf(stderr, "Assemble failed\n");
+            }
         }
         return;
     }
