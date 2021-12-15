@@ -139,15 +139,15 @@ typedef struct WORLD_
 {
     PMEMORY             mem;
     PPROCESSOR_TABLE    prcst;
-    UINT                iteration_number;
+    UINT                tick_number;
     POWNER_TABLE        owntbl;
 } WORLD, * PWORLD;
 
 typedef struct WORLD_PARAM_
 {
     UINT memory_size;
-    UINT program_number;
-    UINT iteration_number;
+    UINT processor_number;
+    UINT tick_number;
     UINT owner_number;
 } WORLD_PARAM, * PWORLD_PARAM;
 
@@ -634,7 +634,8 @@ BOOL OwnerTable_AddName(POWNER_TABLE owntbl, PCONST_CHAR name)
 {
     if (owntbl->number >= owntbl->size)
         return FALSE;
-    strcpy(owntbl->data[owntbl->number++].name, name);
+    strcpy(owntbl->data[owntbl->number].name, name);
+    ++owntbl->number;
     return TRUE;
 }
 
@@ -642,8 +643,8 @@ PWORLD World_Create(PWORLD_PARAM param)
 {
     PWORLD wld = (PWORLD)NativeMalloc(sizeof(WORLD));
     wld->mem = Memory_Create(param->memory_size);
-    wld->prcst = ProcessorTable_Create(param->program_number);
-    wld->iteration_number = param->iteration_number;
+    wld->prcst = ProcessorTable_Create(param->processor_number);
+    wld->tick_number = param->tick_number;
     wld->owntbl = OwnerTable_Create(param->owner_number);
     return wld;
 }
@@ -684,7 +685,7 @@ VOID World_JudgeResult(PWORLD wld)
 BOOL World_Run(PWORLD wld)
 {
     UINT i;
-    for (i = 0; i < wld->iteration_number; ++i)
+    for (i = 0; i < wld->tick_number; ++i)
         if (!ProcessorTable_Tick(wld->prcst, wld->mem))
             return FALSE;
     return TRUE;
@@ -1683,9 +1684,10 @@ VOID ParseCommandLine(INT argc, PCONST_CHAR * argv)
     OPTIONS options;
 
     WORLD_PARAM param = {
-        1000 * 1000 * 100,
-        100,
-        1000 * 1000
+        1000 * 1000 * 100, // memory_size
+        100,               // processor_number
+        1000 * 1000,       // tick_number
+        4                  // owner_number
     };
 
     memset(asmpath, 0, sizeof(asmpath));
