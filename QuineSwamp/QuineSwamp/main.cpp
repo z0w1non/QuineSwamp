@@ -1050,6 +1050,7 @@ BOOL MALLOC_(PMEMORY mem, PPROCESSOR_TABLE prcst, PPROCESSOR prcs)
     {
         for (i = 0; i < prcs->rsv; ++i)
             Debug("RSVPTR[0x%08X] == 0x%02X %s\n", i, prcs->rsvptr[i], CodeToMnemonic(prcs->rsvptr[i]));
+        Debug("USED == 0x%08X\n", prcs->used);
         InitMemoryAndProcesserSecondary(mem, prcst, prcs);
         prcs->rsv = 0;
     }
