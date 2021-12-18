@@ -11,6 +11,8 @@
 typedef unsigned char BYTE, * PBYTE;
 typedef unsigned char BOOL;
 typedef unsigned int UINT, * PUINT;
+typedef unsigned int DWORD, * PDOWRD;
+typedef unsigned short WORD, * PWORD;
 typedef int INT, * PINT;
 typedef char CHAR, * PCHAR, * STRING;
 typedef CONST CHAR * CSTRING;
@@ -61,8 +63,12 @@ enum INSTRUCTION
     SRA    ,
     SLL    ,
     SRL    ,
-    READ   ,
-    WRITE  ,
+    LDD    ,
+    LDW    ,
+    LDB    ,
+    STD    ,
+    STW    ,
+    STB    ,
     SAVE   ,
     SWAP   ,
     SET    ,
@@ -876,13 +882,13 @@ BOOL IMPL(SRL)(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL IMPL(READ)(PWORLD wld, PPROCESSOR prcs)
+inline BOOL LD(PWORLD wld, PPROCESSOR prcs, UINT bytes)
 {
     UINT i, value;
     BYTE data;
 
     value = 0;
-    for (i = 0; i < sizeof(UINT); ++i)
+    for (i = 0; i < bytes; ++i)
     {
         if (!Memory_Read(wld->mem, prcs, prcs->ptr + i, &data))
         {
@@ -898,12 +904,27 @@ BOOL IMPL(READ)(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL IMPL(WRITE)(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(LDD)(PWORLD wld, PPROCESSOR prcs)
+{
+    return LD(wld, prcs, sizeof(DWORD));
+}
+
+BOOL IMPL(LDW)(PWORLD wld, PPROCESSOR prcs)
+{
+    return LD(wld, prcs, sizeof(WORD));
+}
+
+BOOL IMPL(LDB)(PWORLD wld, PPROCESSOR prcs)
+{
+    return LD(wld, prcs, sizeof(BYTE));
+}
+
+inline BOOL ST(PWORLD wld, PPROCESSOR prcs, UINT bytes)
 {
     UINT i;
     BYTE data;
 
-    for (i = 0; i < sizeof(UINT); ++i)
+    for (i = 0; i < bytes; ++i)
     {
         data = (BYTE)(prcs->acc >> (8 * i));
         if (!Memory_Write(wld->mem, prcs, prcs->ptr + i, data))
@@ -916,6 +937,21 @@ BOOL IMPL(WRITE)(PWORLD wld, PPROCESSOR prcs)
 
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
+}
+
+BOOL IMPL(STD)(PWORLD wld, PPROCESSOR prcs)
+{
+    return ST(wld, prcs, sizeof(DWORD));
+}
+
+BOOL IMPL(STW)(PWORLD wld, PPROCESSOR prcs)
+{
+    return ST(wld, prcs, sizeof(WORD));
+}
+
+BOOL IMPL(STB)(PWORLD wld, PPROCESSOR prcs)
+{
+    return ST(wld, prcs, sizeof(BYTE));
 }
 
 BOOL IMPL(SAVE)(PWORLD wld, PPROCESSOR prcs)
@@ -1116,8 +1152,12 @@ INSTRUCTION_INFO instruction_info_table[] = {
     DECLARE_INSTRUCTION_INFO(SRA    ),
     DECLARE_INSTRUCTION_INFO(SLL    ),
     DECLARE_INSTRUCTION_INFO(SRL    ),
-    DECLARE_INSTRUCTION_INFO(READ   ),
-    DECLARE_INSTRUCTION_INFO(WRITE  ),
+    DECLARE_INSTRUCTION_INFO(LDD    ),
+    DECLARE_INSTRUCTION_INFO(LDW    ),
+    DECLARE_INSTRUCTION_INFO(LDB    ),
+    DECLARE_INSTRUCTION_INFO(STD    ),
+    DECLARE_INSTRUCTION_INFO(STW    ),
+    DECLARE_INSTRUCTION_INFO(STB    ),
     DECLARE_INSTRUCTION_INFO(SAVE   ),
     DECLARE_INSTRUCTION_INFO(SWAP   ),
     DECLARE_INSTRUCTION_INFO(SET    ),
