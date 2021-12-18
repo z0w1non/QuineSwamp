@@ -513,7 +513,7 @@ BOOL Processor_Step(PPROCESSOR prcs, PWORLD wld)
     code = *Memory_Data(wld->mem, prcs->addr + prcs->pc);
     if (code < INSTRUCTION_NUMBER)
     {
-        Debug("%s: [0x%02X] 0x%02X %s\n", prcs->name, prcs->pc, code, CodeToMnemonic(code));
+        Debug("%s[0x%08X] 0x%02X %s\n", prcs->name, prcs->pc, code, CodeToMnemonic(code));
         if (!CodeToImpl(code)(wld, prcs))
             return FALSE;
     }
@@ -775,7 +775,7 @@ BOOL IMPL(NOP)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(SEEK)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->ptr = prcs->acc;
-    Debug("PTR <- 0x%08X\n", prcs->acc);
+    Debug("%s.PTR <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -783,7 +783,7 @@ BOOL IMPL(SEEK)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(ADD)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc += prcs->tmp;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -791,7 +791,7 @@ BOOL IMPL(ADD)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(SUB)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc -= prcs->tmp;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -799,7 +799,7 @@ BOOL IMPL(SUB)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(AND)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc &= prcs->tmp;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -807,7 +807,7 @@ BOOL IMPL(AND)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(OR)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc |= prcs->tmp;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -815,7 +815,7 @@ BOOL IMPL(OR)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(XOR)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc ^= prcs->tmp;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -823,7 +823,7 @@ BOOL IMPL(XOR)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(NOT)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = (prcs->acc != 0) ? 0 : ~0;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -831,7 +831,7 @@ BOOL IMPL(NOT)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(SLA)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = (prcs->tmp << prcs->acc) & ~1;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -841,7 +841,7 @@ BOOL IMPL(SRA)(PWORLD wld, PPROCESSOR prcs)
     UINT msb;
     msb = prcs->acc & 0x80000000;
     prcs->acc = (prcs->tmp >> prcs->acc) | msb;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -849,7 +849,7 @@ BOOL IMPL(SRA)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(SLL)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = (prcs->tmp << prcs->acc) & 0x8FFFFFFF;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -857,7 +857,7 @@ BOOL IMPL(SLL)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(SRL)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = (prcs->tmp >> prcs->acc) & ~1;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -878,7 +878,7 @@ BOOL IMPL(READ)(PWORLD wld, PPROCESSOR prcs)
         value |= data << (8 * i);
     }
     prcs->acc = value;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
 
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
@@ -907,7 +907,7 @@ BOOL IMPL(WRITE)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(SAVE)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->tmp = prcs->acc;
-    Debug("TMP <- 0x%08X\n", prcs->tmp);
+    Debug("%s.TMP <- 0x%08X\n", prcs->name, prcs->tmp);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -918,8 +918,8 @@ BOOL IMPL(SWAP)(PWORLD wld, PPROCESSOR prcs)
     tmp = prcs->tmp;
     prcs->tmp = prcs->acc;
     prcs->acc = tmp;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
-    Debug("TMP <- 0x%08X\n", prcs->tmp);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
+    Debug("%s.TMP <- 0x%08X\n", prcs->name, prcs->tmp);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -940,7 +940,7 @@ BOOL IMPL(SET)(PWORLD wld, PPROCESSOR prcs)
         value |= data << (i * 8);
     }
     prcs->acc = value;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1 + sizeof(UINT));
     return TRUE;
 }
@@ -948,14 +948,14 @@ BOOL IMPL(SET)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(JMP)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->pc = prcs->acc;
-    Debug("PC <- 0x%08X\n", prcs->pc);
+    Debug("%s.PC <- 0x%08X\n", prcs->name, prcs->pc);
     Processor_RoundProgramCounter(prcs);
     return TRUE;
 }
 
 BOOL IMPL(JEZ)(PWORLD wld, PPROCESSOR prcs)
 {
-    Debug("TMP == 0x%08X\n", prcs->tmp);
+    Debug("%s.TMP == 0x%08X\n", prcs->name, prcs->tmp);
     if (prcs->tmp == 0)
         prcs->pc = prcs->acc;
     else
@@ -972,8 +972,8 @@ BOOL IMPL(PUSH)(PWORLD wld, PPROCESSOR prcs)
         prcs->pc = 0;
         return TRUE;
     }
-    Debug("PC <- 0x%08X\n", prcs->pc);
-    Debug("SP <- 0x%08X\n", prcs->sp);
+    Debug("%s.PC <- 0x%08X\n", prcs->name, prcs->pc);
+    Debug("%s.SP <- 0x%08X\n", prcs->name, prcs->sp);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -988,8 +988,8 @@ BOOL IMPL(POP)(PWORLD wld, PPROCESSOR prcs)
     }
     prcs->acc = data;
     ++prcs->sp;
-    Debug("PC <- 0x%08X\n", prcs->pc);
-    Debug("SP <- 0x%08X\n", prcs->sp);
+    Debug("%s.PC <- 0x%08X\n", prcs->name, prcs->pc);
+    Debug("%s.SP <- 0x%08X\n", prcs->name, prcs->sp);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -1014,8 +1014,8 @@ BOOL IMPL(CALL)(PWORLD wld, PPROCESSOR prcs)
         return TRUE;
     }
     prcs->pc = data;
-    Debug("PC <- 0x%08X\n", prcs->pc);
-    Debug("SP <- 0x%08X\n", prcs->sp);
+    Debug("%s.PC <- 0x%08X\n", prcs->name, prcs->pc);
+    Debug("%s.SP <- 0x%08X\n", prcs->name, prcs->sp);
     return TRUE;
 }
 
@@ -1029,8 +1029,8 @@ BOOL IMPL(RET)(PWORLD wld, PPROCESSOR prcs)
     }
     prcs->pc = data;
     ++prcs->sp;
-    Debug("PC <- 0x%08X\n", prcs->pc);
-    Debug("SP <- 0x%08X\n", prcs->sp);
+    Debug("%s.PC <- 0x%08X\n", prcs->name, prcs->pc);
+    Debug("%s.SP <- 0x%08X\n", prcs->name, prcs->sp);
     Processor_RoundProgramCounter(prcs);
     return TRUE;
 }
@@ -1051,7 +1051,7 @@ BOOL IMPL(RSV)(PWORLD wld, PPROCESSOR prcs)
         return TRUE;
     }
     prcs->rsvptr[prcs->rsvcnt] = data;
-    Debug("RSV[0x%08X] <- 0x%02X %s\n", prcs->rsvcnt, prcs->rsvptr[prcs->rsvcnt], CodeToMnemonic(prcs->rsvptr[prcs->rsvcnt]));
+    Debug("%s.RSV[0x%08X] <- 0x%02X %s\n", prcs->name, prcs->rsvcnt, prcs->rsvptr[prcs->rsvcnt], CodeToMnemonic(prcs->rsvptr[prcs->rsvcnt]));
     ++prcs->rsvcnt;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
@@ -1063,8 +1063,8 @@ BOOL IMPL(CPY)(PWORLD wld, PPROCESSOR prcs)
     if (prcs->rsvcnt)
     {
         for (i = 0; i < prcs->rsvcnt; ++i)
-            Debug("RSV[0x%08X] == 0x%02X %s\n", i, prcs->rsvptr[i], CodeToMnemonic(prcs->rsvptr[i]));
-        Debug("STEP == 0x%08X\n", prcs->step);
+            Debug("%s.RSV[0x%08X] == 0x%02X %s\n", prcs->name, i, prcs->rsvptr[i], CodeToMnemonic(prcs->rsvptr[i]));
+        Debug("%s.STEP == 0x%08X\n", prcs->name, prcs->step);
         InitMemoryAndProcesserSecondary(wld, prcs);
         prcs->rsvcnt = 0;
     }
@@ -1075,7 +1075,7 @@ BOOL IMPL(CPY)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(ADDR)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = prcs->addr;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
@@ -1083,7 +1083,7 @@ BOOL IMPL(ADDR)(PWORLD wld, PPROCESSOR prcs)
 BOOL IMPL(SIZE)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = prcs->size;
-    Debug("ACC <- 0x%08X\n", prcs->acc);
+    Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
