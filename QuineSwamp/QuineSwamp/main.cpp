@@ -39,6 +39,8 @@ typedef size_t SIZE_T;
 
 #define DEFAULT_ASSEMBLY_SIZE 1024
 
+#define IMPL(mnemonic) mnemonic ## _IMPL
+
 enum
 {
     SYSTEM = 0,
@@ -70,8 +72,8 @@ enum INSTRUCTION
     POP    ,
     CALL   ,
     RET    ,
-    RESERVE,
-    MALLOC ,
+    RSV    ,
+    CPY    ,
     ADDR   ,
     SIZE   ,
     INSTRUCTION_NUMBER
@@ -90,7 +92,6 @@ enum INSTRUCTION
     FORWARD_DECLARATION(SCORE_WONER_PAIR);
     FORWARD_DECLARATION(STRING_UINT_PAIR);
     FORWARD_DECLARATION(STRING_UINT_MAP );
-    FORWARD_DECLARATION(VECTOR          );
 #undef FORWARD_DECLARATION
 
 typedef struct MEMORY_
@@ -110,7 +111,7 @@ typedef struct PROCESSOR_
     UINT    ptr;
     UINT    acc;
     UINT    tmp;
-    UINT    rsv;
+    UINT    rsvcnt;
     UINT    rsvmax;
     PBYTE   rsvptr;
     UINT    step;
@@ -427,7 +428,7 @@ BOOL InitMemoryAndProcesserPrimary(PWORLD wld, BYTE owner, PBYTE data, UINT size
     prcs->ptr = 0;
     prcs->acc = 0;
     prcs->tmp = 0;
-    prcs->rsv = 0;
+    prcs->rsvcnt = 0;
     prcs->rsvmax = DEFAULT_RESERVE_MAX;
     prcs->rsvptr = (PBYTE)NativeMalloc(sizeof(BYTE) * prcs->rsvmax);
     if (!prcs->rsvptr)
@@ -454,18 +455,18 @@ BOOL InitMemoryAndProcesserSecondary(PWORLD wld, PPROCESSOR parent)
     UINT i, addr;
     PPROCESSOR prcs;
 
-    if (!FindFreeMemoryAndProcessor(wld->mem, wld->prcst, parent->rsv, &addr, &prcs))
+    if (!FindFreeMemoryAndProcessor(wld->mem, wld->prcst, parent->rsvcnt, &addr, &prcs))
         return FALSE;
 
     prcs->pid = CreatePID();
     prcs->addr = addr;
-    prcs->size = parent->rsv;
+    prcs->size = parent->rsvcnt;
     prcs->pc = 0;
-    prcs->sp = parent->rsv;
+    prcs->sp = parent->rsvcnt;
     prcs->ptr = 0;
     prcs->acc = 0;
     prcs->tmp = 0;
-    prcs->rsv = 0;
+    prcs->rsvcnt = 0;
     prcs->rsvmax = DEFAULT_RESERVE_MAX;
     prcs->rsvptr = (PBYTE)NativeMalloc(sizeof(BYTE) * prcs->rsvmax);
     if (!prcs->rsvptr)
@@ -535,7 +536,7 @@ VOID Processor_Dump(PPROCESSOR prcs)
     printf("PTR  : 0x%08X\n", prcs->ptr    );
     printf("ACC  : 0x%08X\n", prcs->acc    );
     printf("TMP  : 0x%08X\n", prcs->tmp    );
-    printf("RSV  : 0x%08X\n", prcs->rsv    );
+    printf("RSV  : 0x%08X\n", prcs->rsvcnt    );
     printf("OWNER: 0x%08X\n", prcs->owner  );
     printf("USED : 0x%08X\n", prcs->step   );
 }
@@ -765,13 +766,13 @@ BOOL Memory_OutOfMemory(PMEMORY mem, UINT addr)
     return addr >= mem->size;
 }
 
-BOOL NOP_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(NOP)(PWORLD wld, PPROCESSOR prcs)
 {
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
-BOOL SEEK_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(SEEK)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->ptr = prcs->acc;
     Debug("PTR <- 0x%08X\n", prcs->acc);
@@ -779,7 +780,7 @@ BOOL SEEK_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL ADD_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(ADD)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc += prcs->tmp;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -787,7 +788,7 @@ BOOL ADD_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL SUB_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(SUB)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc -= prcs->tmp;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -795,7 +796,7 @@ BOOL SUB_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL AND_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(AND)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc &= prcs->tmp;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -803,7 +804,7 @@ BOOL AND_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL OR_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(OR)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc |= prcs->tmp;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -811,7 +812,7 @@ BOOL OR_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL XOR_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(XOR)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc ^= prcs->tmp;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -819,7 +820,7 @@ BOOL XOR_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL NOT_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(NOT)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = (prcs->acc != 0) ? 0 : ~0;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -827,7 +828,7 @@ BOOL NOT_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL SLA_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(SLA)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = (prcs->tmp << prcs->acc) & ~1;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -835,7 +836,7 @@ BOOL SLA_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL SRA_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(SRA)(PWORLD wld, PPROCESSOR prcs)
 {
     UINT msb;
     msb = prcs->acc & 0x80000000;
@@ -845,7 +846,7 @@ BOOL SRA_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL SLL_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(SLL)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = (prcs->tmp << prcs->acc) & 0x8FFFFFFF;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -853,7 +854,7 @@ BOOL SLL_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL SRL_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(SRL)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = (prcs->tmp >> prcs->acc) & ~1;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -861,7 +862,7 @@ BOOL SRL_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL READ_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(READ)(PWORLD wld, PPROCESSOR prcs)
 {
     UINT i, value;
     BYTE data;
@@ -883,7 +884,7 @@ BOOL READ_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL WRITE_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(WRITE)(PWORLD wld, PPROCESSOR prcs)
 {
     UINT i;
     BYTE data;
@@ -903,7 +904,7 @@ BOOL WRITE_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL SAVE_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(SAVE)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->tmp = prcs->acc;
     Debug("TMP <- 0x%08X\n", prcs->tmp);
@@ -911,7 +912,7 @@ BOOL SAVE_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL SWAP_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(SWAP)(PWORLD wld, PPROCESSOR prcs)
 {
     UINT tmp;
     tmp = prcs->tmp;
@@ -923,7 +924,7 @@ BOOL SWAP_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL SET_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(SET)(PWORLD wld, PPROCESSOR prcs)
 {
     UINT i, value;
     BYTE data;
@@ -944,7 +945,7 @@ BOOL SET_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL JMP_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(JMP)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->pc = prcs->acc;
     Debug("PC <- 0x%08X\n", prcs->pc);
@@ -952,7 +953,7 @@ BOOL JMP_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL JEZ_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(JEZ)(PWORLD wld, PPROCESSOR prcs)
 {
     Debug("TMP == 0x%08X\n", prcs->tmp);
     if (prcs->tmp == 0)
@@ -963,7 +964,7 @@ BOOL JEZ_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL PUSH_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(PUSH)(PWORLD wld, PPROCESSOR prcs)
 {
     --prcs->sp;
     if (!Memory_Write(wld->mem, prcs, prcs->sp, prcs->acc))
@@ -977,7 +978,7 @@ BOOL PUSH_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL POP_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(POP)(PWORLD wld, PPROCESSOR prcs)
 {
     BYTE data;
     if (!Memory_Read(wld->mem, prcs, prcs->sp, &data))
@@ -993,7 +994,7 @@ BOOL POP_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL CALL_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(CALL)(PWORLD wld, PPROCESSOR prcs)
 {
     BYTE data;
     if (prcs->pc + 1 >= prcs->size)
@@ -1018,7 +1019,7 @@ BOOL CALL_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL RET_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(RET)(PWORLD wld, PPROCESSOR prcs)
 {
     BYTE data;
     if (!Memory_Read(wld->mem, prcs, prcs->sp, &data))
@@ -1034,10 +1035,10 @@ BOOL RET_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL RESERVE_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(RSV)(PWORLD wld, PPROCESSOR prcs)
 {
     BYTE data;
-    if (prcs->rsv >= prcs->rsvmax)
+    if (prcs->rsvcnt >= prcs->rsvmax)
     {
         prcs->rsvmax *= 2;
         prcs->rsvptr = (PBYTE)NativeRealloc(prcs->rsvptr, sizeof(BYTE) * prcs->rsvmax);
@@ -1049,29 +1050,29 @@ BOOL RESERVE_(PWORLD wld, PPROCESSOR prcs)
         prcs->pc = 0;
         return TRUE;
     }
-    prcs->rsvptr[prcs->rsv] = data;
-    Debug("RSVPTR[0x%08X] <- 0x%02X %s\n", prcs->rsv, prcs->rsvptr[prcs->rsv], CodeToMnemonic(prcs->rsvptr[prcs->rsv]));
-    ++prcs->rsv;
+    prcs->rsvptr[prcs->rsvcnt] = data;
+    Debug("RSV[0x%08X] <- 0x%02X %s\n", prcs->rsvcnt, prcs->rsvptr[prcs->rsvcnt], CodeToMnemonic(prcs->rsvptr[prcs->rsvcnt]));
+    ++prcs->rsvcnt;
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
-BOOL MALLOC_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(CPY)(PWORLD wld, PPROCESSOR prcs)
 {
     UINT i;
-    if (prcs->rsv)
+    if (prcs->rsvcnt)
     {
-        for (i = 0; i < prcs->rsv; ++i)
-            Debug("RSVPTR[0x%08X] == 0x%02X %s\n", i, prcs->rsvptr[i], CodeToMnemonic(prcs->rsvptr[i]));
+        for (i = 0; i < prcs->rsvcnt; ++i)
+            Debug("RSV[0x%08X] == 0x%02X %s\n", i, prcs->rsvptr[i], CodeToMnemonic(prcs->rsvptr[i]));
         Debug("STEP == 0x%08X\n", prcs->step);
         InitMemoryAndProcesserSecondary(wld, prcs);
-        prcs->rsv = 0;
+        prcs->rsvcnt = 0;
     }
     Processor_IncreceProgramCounter(prcs, 1);
     return TRUE;
 }
 
-BOOL ADDR_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(ADDR)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = prcs->addr;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -1079,7 +1080,7 @@ BOOL ADDR_(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL SIZE_(PWORLD wld, PPROCESSOR prcs)
+BOOL IMPL(SIZE)(PWORLD wld, PPROCESSOR prcs)
 {
     prcs->acc = prcs->size;
     Debug("ACC <- 0x%08X\n", prcs->acc);
@@ -1088,7 +1089,7 @@ BOOL SIZE_(PWORLD wld, PPROCESSOR prcs)
 }
 
 INSTRUCTION_INFO instruction_info_table[] = {
-#define DECLARE_INSTRUCTION_INFO(s) {TO_STRING(s), s, s##_}
+#define DECLARE_INSTRUCTION_INFO(s) {TO_STRING(s), s, IMPL(s)}
     DECLARE_INSTRUCTION_INFO(NOP    ),
     DECLARE_INSTRUCTION_INFO(SEEK   ),
     DECLARE_INSTRUCTION_INFO(ADD    ),
@@ -1112,8 +1113,8 @@ INSTRUCTION_INFO instruction_info_table[] = {
     DECLARE_INSTRUCTION_INFO(POP    ),
     DECLARE_INSTRUCTION_INFO(CALL   ),
     DECLARE_INSTRUCTION_INFO(RET    ),
-    DECLARE_INSTRUCTION_INFO(RESERVE),
-    DECLARE_INSTRUCTION_INFO(MALLOC ),
+    DECLARE_INSTRUCTION_INFO(RSV),
+    DECLARE_INSTRUCTION_INFO(CPY ),
     DECLARE_INSTRUCTION_INFO(ADDR   ),
     DECLARE_INSTRUCTION_INFO(SIZE   ),
 #undef DECLARE_INSTRUCTION_INFO
