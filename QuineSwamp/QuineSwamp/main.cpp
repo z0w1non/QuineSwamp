@@ -1817,7 +1817,7 @@ VOID ParseCommandLine(INT argc, CSTRING * argv)
 
     WORLD_PARAM param = {
         1024 * 8,      // memory_size
-        32,             // processor_number
+        32,            // processor_number
         1024 * 4       // tick_number
     };
 
