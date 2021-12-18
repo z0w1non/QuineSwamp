@@ -1795,7 +1795,7 @@ BOOL ParseCommandLineParameter(INT argc, CSTRING * argv, CHAR c, PUINT param)
             }
             else
             {
-                fprintf(stderr, "%c parameter is not a number (\"%s\")", c, argv[i + 1]);
+                fprintf(stderr, "%c parameter is not a number (\"%s\")\n", c, argv[i + 1]);
                 return FALSE;
             }
         }
