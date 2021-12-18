@@ -127,12 +127,12 @@ MYLABEL:
 ## コマンドライン
 ### アセンブル
 * コマンドライン
-    * QuineSwamp <input-path>
+    * `QuineSwamp <input-path>`
 * 効果
-	* <input-path>をアセンブルする。結果は<input-path>の拡張子を `.qs` に置換したパスに出力される。
+	* `<input-path>` をアセンブルする。結果は `<input-path>` の拡張子を `.qs` に置換したパスに出力される。
 ### 実行
 * コマンドライン
-	* QuineSwamp -d <input-path-list>
+	* `QuineSwamp -d <input-path-list>`
 * 効果
-	* <input-path-list> をメモリに配置しゲームを開始する。実行結果は標準出力に出力される。
-	* <input-path-list> には、前述のアセンブルのコマンドラインによりアセンブルしたファイルのパスを空白で区切り指定する。
+	* `<input-path-list>` をメモリに配置しゲームを開始する。実行結果は標準出力に出力される。
+	* `<input-path-list>` には、前述のアセンブルのコマンドラインによりアセンブルしたファイルのパスを空白で区切り指定する。
