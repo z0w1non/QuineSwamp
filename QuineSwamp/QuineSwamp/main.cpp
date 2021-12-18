@@ -198,6 +198,7 @@ VOID NativeFree(VOID * ptr);
 
 UINT Random();
 BYTE RandomInstruction();
+BYTE RandomByte();
 UINT CreatePID();
 
 PPROCESSOR_TABLE ProcessorTable_Create(UINT size);
@@ -256,8 +257,13 @@ VOID Tokens_Release(PCHAR tokens);
 BOOL Assembly_Reserve(PASSEMBLY asm_, UINT size);
 PASSEMBLY Assembly_AssembleFromFile(CSTRING file);
 PASSEMBLY Assembly_ReadAssembledFile(CSTRING file);
+PASSEMBLY Assembly_CreateFromMemory(PBYTE data, UINT size);
+BOOL Assembly_Delete(PASSEMBLY asm_, UINT pos);
+BOOL Assembly_Insert(PASSEMBLY asm_, UINT pos, BYTE data);
+BOOL Assembly_Replace(PASSEMBLY asm_, UINT pos, BYTE data);
+BOOL Assembly_RandomMutate(PASSEMBLY asm_);
 VOID Assembly_Release(PASSEMBLY asm_);
-BOOL Assembly_CreateFile(PASSEMBLY asm_, CSTRING path);
+BOOL Assembly_WriteFile(PASSEMBLY asm_, CSTRING path);
 
 INT ScoreOwnerPairComparator(CONST VOID * a, CONST VOID * b);
 CSTRING SuffixString(UINT n);
@@ -328,6 +334,11 @@ UINT Random()
 BYTE RandomInstruction()
 {
     return Random() % INSTRUCTION_NUMBER;
+}
+
+BYTE RandomByte()
+{
+    return Random() % (UCHAR_MAX + 1);
 }
 
 UINT CreatePID()
@@ -1576,6 +1587,83 @@ cleanup:
     return asm_;
 }
 
+PASSEMBLY Assembly_CreateFromMemory(PBYTE data, UINT size)
+{
+    PASSEMBLY asm_ = (PASSEMBLY)NativeMalloc(sizeof(ASSEMBLY));
+    if (!asm_)
+        return NULL;
+
+    asm_->data = (PBYTE)NativeMalloc(sizeof(BYTE) * size);
+    if (!asm_->data)
+        goto error;
+
+    asm_->size = size;
+    asm_->maxsize = size;
+
+    return asm_;
+
+error:
+    Assembly_Release(asm_);
+    return NULL;
+}
+
+BOOL Assembly_Delete(PASSEMBLY asm_, UINT pos)
+{
+    UINT i;
+    if (asm_->size == 0 || pos >= asm_->size)
+        return FALSE;
+    for (i = pos; i < asm_->size; ++i)
+        asm_->data[i] = asm_->data[i + 1];
+    --asm_->size;
+    return TRUE;
+}
+
+BOOL Assembly_Insert(PASSEMBLY asm_, UINT pos, BYTE data)
+{
+    UINT i;
+    if (pos > asm_->size)
+        return FALSE;
+    if (!Assembly_Reserve(asm_, asm_->size + 1))
+        return FALSE;
+    for (i = asm_->size; i > pos; --i)
+        asm_->data[i] = asm_->data[i - 1];
+    asm_->data[pos] = data;
+    ++asm_->size;
+    return TRUE;
+}
+
+BOOL Assembly_Replace(PASSEMBLY asm_, UINT pos, BYTE data)
+{
+    if (pos > asm_->size)
+        return FALSE;
+    asm_->data[pos] = data;
+    return TRUE;
+}
+
+BOOL Assembly_RandomMutate(PASSEMBLY asm_)
+{
+    enum
+    {
+        DELETE,
+        INSERT,
+        REPLACE,
+        NUMBER
+    };
+
+    switch (Random() % NUMBER)
+    {
+    case DELETE:
+        return Assembly_Delete(asm_, Random() % asm_->size);
+        break;
+    case INSERT:
+        return Assembly_Insert(asm_, Random() % (asm_->size + 1), RandomByte());
+        break;
+    case REPLACE:
+        return Assembly_Replace(asm_, Random() % asm_->size, RandomByte());
+        break;
+    }
+    return FALSE;
+}
 
 VOID Assembly_Release(PASSEMBLY asm_)
 {
@@ -1586,7 +1674,7 @@ VOID Assembly_Release(PASSEMBLY asm_)
     }
 }
 
-BOOL Assembly_CreateFile(PASSEMBLY asm_, CSTRING path)
+BOOL Assembly_WriteFile(PASSEMBLY asm_, CSTRING path)
 {
     FILE * fp;
     BOOL result;
@@ -1833,7 +1921,7 @@ VOID ParseCommandLine(INT argc, CSTRING * argv)
             memset(asmpath, 0, sizeof(asmpath));
             if (GetAssemblyFilePath(argv[1], asmpath))
             {
-                if (Assembly_CreateFile(asm_, asmpath))
+                if (Assembly_WriteFile(asm_, asmpath))
                     fprintf(stdout, "Assemble succseed\n");
                 else
                     fprintf(stderr, "Assemble failed\n");
