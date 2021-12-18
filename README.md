@@ -136,3 +136,8 @@ MYLABEL:
 * 効果
 	* `<input-path-list>` をメモリに配置しゲームを開始する。実行結果は標準出力に出力される。
 	* `<input-path-list>` には、前述のアセンブルのコマンドラインによりアセンブルしたファイルのパスを空白で区切り指定する。
+### パラメータ調整
+* コマンドライン
+	* `QuineSwamp -d [-m <memory-size>] [-p <processor-number>] [-t tick-number] <input-path-list>`
+* 効果
+	各種パラメータを指定する。
