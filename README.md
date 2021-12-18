@@ -138,4 +138,4 @@ MYLABEL:
 * コマンドライン
 	* `QuineSwamp -d [-m <memory-size>] [-p <processor-number>] [-t tick-number] <input-path-list>`
 * 効果
-	各種パラメータを指定する。
+	* 各種パラメータを指定する。
