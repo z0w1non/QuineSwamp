@@ -276,7 +276,8 @@ VOID PrintHelp();
 
 BOOL Options_EnabledOption(POPTIONS options, CHAR option);
 VOID Options_ParseCommandLine(POPTIONS options, INT argc, CSTRING * argv);
-
+BOOL IsNumber(CSTRING s);
+BOOL ParseCommandLineParameter(INT argc, CSTRING * argv, CHAR c, PUINT param);
 VOID ParseCommandLine(INT argc, CSTRING * argv);
 
 VOID * NativeMalloc(SIZE_T size)
@@ -569,7 +570,7 @@ BOOL FindFreeMemoryAndProcessor(PMEMORY mem, PPROCESSOR_TABLE prcst, UINT size, 
                 if (tmp == size)
                 {
                     *addr = i;
-                    Debug("free memory found (addr=0x%08X size=0x%08X)\n", i, tmp);
+                    Debug("Free memory found (addr=0x%08X size=0x%08X)\n", i, tmp);
                     goto free_memory_found;
                 }
                 i += tmp;
@@ -1768,6 +1769,37 @@ VOID Options_ParseCommandLine(POPTIONS options, INT argc, CSTRING * argv)
         Options_ParseArgment(options, argv[i]);
 }
 
+BOOL IsNumber(CSTRING s)
+{
+    CSTRING c;
+    for (c = s; *c; ++c)
+        if (!isdigit(*c))
+            return FALSE;
+    return TRUE;
+}
+
+BOOL ParseCommandLineParameter(INT argc, CSTRING * argv, CHAR c, PUINT param)
+{
+    UINT i, end;
+    end = (UINT)argc - 1;
+    for (i = 1; i < end; ++i)
+        if (strlen(argv[i]) == 2 && argv[i][0] == '-' && argv[i][1] == c)
+        {
+            if (IsNumber(argv[i + 1]))
+            {
+                if (param)
+                    *param = atoi(argv[i + 1]);
+                return TRUE;
+            }
+            else
+            {
+                fprintf(stderr, "%c parameter is not a number (\"%s\")", c, argv[i + 1]);
+                return FALSE;
+            }
+        }
+    return FALSE;
+}
+
 VOID ParseCommandLine(INT argc, CSTRING * argv)
 {
     UINT i;
@@ -1813,11 +1845,21 @@ VOID ParseCommandLine(INT argc, CSTRING * argv)
     if (Options_EnabledOption(&options, 'd'))
     {
         debug = TRUE;
+
+        ParseCommandLineParameter(argc, argv, 'm', &param.memory_size     );
+        ParseCommandLineParameter(argc, argv, 'p', &param.processor_number);
+        ParseCommandLineParameter(argc, argv, 't', &param.tick_number     );
+        ParseCommandLineParameter(argc, argv, 'o', &param.owner_number    );
+        printf("Memory size      = %d\n", param.memory_size     );
+        printf("Processor number = %d\n", param.processor_number);
+        printf("Tick number      = %d\n", param.tick_number     );
+        printf("Owner number     = %d\n", param.owner_number    );
+
         wld = World_Create(&param);
 
         for (i = 1; i < (UINT)argc; ++i)
         {
-            if (!Options_ParseArgment(NULL, argv[i]))
+            if (!Options_ParseArgment(NULL, argv[i]) && !IsNumber(argv[i]))
             {
                 memset(basename, 0, sizeof(basename));
                 GetBaseName(argv[i], basename);
