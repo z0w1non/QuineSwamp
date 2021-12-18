@@ -1718,7 +1718,10 @@ VOID PrintHelp()
 {
     printf("Alllowed options:\n");
     printf("    -h : produce help message\n");
-    printf("    -d : debug assembly file\n");
+    printf("    -d : debug assembly files\n");
+    printf("    -m : memory size\n");
+    printf("    -p : processor number\n");
+    printf("    -t : tick number\n");
 }
 
 BOOL Options_EnabledOption(POPTIONS options, CHAR option)
