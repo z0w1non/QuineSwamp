@@ -414,7 +414,7 @@ BOOL InitMemoryAndProcesserPrimary(PWORLD wld, BYTE owner, PBYTE data, UINT size
 {
 #define DEFAULT_RESERVE_MAX 1024
 
-    UINT i, addr;
+    UINT i, addr, code;
     PPROCESSOR prcs;
 
     if (!FindFreeMemoryAndProcessor(wld->mem, wld->prcst, size, &addr, &prcs))
@@ -441,6 +441,8 @@ BOOL InitMemoryAndProcesserPrimary(PWORLD wld, BYTE owner, PBYTE data, UINT size
     {
         *Memory_Data(wld->mem, addr + i) = data[i];
         *Memory_Owner(wld->mem, addr + i) = owner;
+        code = *Memory_Data(wld->mem, addr + i);
+        Debug("[0x%08X] <- 0x%02X %s\n", addr + i, code, CodeToMnemonic(code));
     }
 
     return TRUE;
@@ -452,7 +454,7 @@ BOOL InitMemoryAndProcesserSecondary(PWORLD wld, PPROCESSOR parent)
 {
 #define DEFAULT_RESERVE_MAX 1024
 
-    UINT i, addr;
+    UINT i, addr, code;
     PPROCESSOR prcs;
 
     if (!FindFreeMemoryAndProcessor(wld->mem, wld->prcst, parent->rsvcnt, &addr, &prcs))
@@ -479,7 +481,8 @@ BOOL InitMemoryAndProcesserSecondary(PWORLD wld, PPROCESSOR parent)
     {
         *Memory_Data(wld->mem, addr + i) = parent->rsvptr[i];
         *Memory_Owner(wld->mem, addr + i) = parent->owner;
-        Debug("[0x%08X] <- 0x%02X\n", addr + i, *Memory_Data(wld->mem, addr + i));
+        code = *Memory_Data(wld->mem, addr + i);
+        Debug("[0x%08X] <- 0x%02X %s\n", addr + i, code, CodeToMnemonic(code));
     }
 
     return TRUE;
@@ -1122,6 +1125,8 @@ INSTRUCTION_INFO instruction_info_table[] = {
 
 CSTRING CodeToMnemonic(BYTE code)
 {
+    if (code >= INSTRUCTION_NUMBER)
+        return "";
     return instruction_info_table[code].mnemonic;
 }
 
