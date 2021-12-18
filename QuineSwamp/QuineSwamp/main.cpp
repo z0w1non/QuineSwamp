@@ -1816,9 +1816,9 @@ VOID ParseCommandLine(INT argc, CSTRING * argv)
     OPTIONS options;
 
     WORLD_PARAM param = {
-        1000 * 10,      // memory_size
+        1024 * 8,      // memory_size
         32,             // processor_number
-        5000            // tick_number
+        1024 * 4       // tick_number
     };
 
     memset(asmpath, 0, sizeof(asmpath));
