@@ -528,17 +528,17 @@ VOID Processor_SetName(PPROCESSOR prcs, POWNER_TABLE owntbl)
 
 VOID Processor_Dump(PPROCESSOR prcs)
 {
-    printf("PID  : 0x%08X\n", prcs->pid    );
-    printf("ADDR : 0x%08X\n", prcs->addr   );
-    printf("SIZE : 0x%08X\n", prcs->size   );
-    printf("PC   : 0x%08X\n", prcs->pc     );
-    printf("SP   : 0x%08X\n", prcs->sp     );
-    printf("PTR  : 0x%08X\n", prcs->ptr    );
-    printf("ACC  : 0x%08X\n", prcs->acc    );
-    printf("TMP  : 0x%08X\n", prcs->tmp    );
-    printf("RSV  : 0x%08X\n", prcs->rsvcnt    );
-    printf("OWNER: 0x%08X\n", prcs->owner  );
-    printf("USED : 0x%08X\n", prcs->step   );
+    printf("PID  : 0x%08X\n", prcs->pid   );
+    printf("ADDR : 0x%08X\n", prcs->addr  );
+    printf("SIZE : 0x%08X\n", prcs->size  );
+    printf("PC   : 0x%08X\n", prcs->pc    );
+    printf("SP   : 0x%08X\n", prcs->sp    );
+    printf("PTR  : 0x%08X\n", prcs->ptr   );
+    printf("ACC  : 0x%08X\n", prcs->acc   );
+    printf("TMP  : 0x%08X\n", prcs->tmp   );
+    printf("RSV  : 0x%08X\n", prcs->rsvcnt);
+    printf("OWNER: 0x%08X\n", prcs->owner );
+    printf("USED : 0x%08X\n", prcs->step  );
 }
 
 PBYTE Memory_Data(PMEMORY mem, UINT addr)
