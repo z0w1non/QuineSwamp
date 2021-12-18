@@ -150,7 +150,6 @@ typedef struct WORLD_PARAM_
     UINT memory_size;
     UINT processor_number;
     UINT tick_number;
-    UINT owner_number;
 } WORLD_PARAM, * PWORLD_PARAM;
 
 typedef BOOL(*INSTRUCTION_IMPL)(PWORLD wld, PPROCESSOR prcs);
@@ -686,7 +685,7 @@ PWORLD World_Create(PWORLD_PARAM param)
 
     wld->tick_number = param->tick_number;
 
-    wld->owntbl = OwnerTable_Create(param->owner_number);
+    wld->owntbl = OwnerTable_Create(UCHAR_MAX + 1);
     if (!wld->owntbl)
         goto error;
 
@@ -1811,8 +1810,7 @@ VOID ParseCommandLine(INT argc, CSTRING * argv)
     WORLD_PARAM param = {
         1000 * 10,      // memory_size
         32,             // processor_number
-        5000,           // tick_number
-        4               // owner_number
+        5000            // tick_number
     };
 
     memset(asmpath, 0, sizeof(asmpath));
@@ -1849,11 +1847,9 @@ VOID ParseCommandLine(INT argc, CSTRING * argv)
         ParseCommandLineParameter(argc, argv, 'm', &param.memory_size     );
         ParseCommandLineParameter(argc, argv, 'p', &param.processor_number);
         ParseCommandLineParameter(argc, argv, 't', &param.tick_number     );
-        ParseCommandLineParameter(argc, argv, 'o', &param.owner_number    );
         printf("Memory size      = %d\n", param.memory_size     );
         printf("Processor number = %d\n", param.processor_number);
         printf("Tick number      = %d\n", param.tick_number     );
-        printf("Owner number     = %d\n", param.owner_number    );
 
         wld = World_Create(&param);
 
