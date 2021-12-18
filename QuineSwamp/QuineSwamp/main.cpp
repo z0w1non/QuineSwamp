@@ -1429,14 +1429,13 @@ PASSEMBLY Assembly_AssembleFromFile(CSTRING file)
 
     tokens = Tokens_CreateFromFile(file);
 
-    DEBUG("file=%s\n", file);
-    DEBUG("tokens=%p\n", tokens);
+    printf("file=%s\n", file);
 
     token = tokens;
     next_token = NULL;
     while (*token)
     {
-        DEBUG("token=\"%s\"\n", token);
+        printf("token=\"%s\"\n", token);
         next_token = token;
         while (*next_token)
             ++next_token;
@@ -1444,7 +1443,7 @@ PASSEMBLY Assembly_AssembleFromFile(CSTRING file)
 
         if (strcmp(next_token, ":") == 0 && IsLabel(token))
         {
-            DEBUG("label \"%s\" 0x%08X\n", token, asm_->size);
+            printf("label \"%s\" 0x%08X\n", token, asm_->size);
             if (StringUIntMap_Find(label_to_address, token, NULL))
                 fprintf(stderr, "already declared label \"%s\"\n", token);
             else if (!StringUIntMap_Add(label_to_address, token, asm_->size))
@@ -1454,7 +1453,7 @@ PASSEMBLY Assembly_AssembleFromFile(CSTRING file)
         }
         else if (StringUIntMap_Find(label_to_address, token, &value) || StringToUint(token, &value))
         {
-            DEBUG("value 0x%08X\n", value);
+            printf("value 0x%08X\n", value);
             if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
                 goto cleanup;
             WriteUInt(&asm_->data[asm_->size], value);
@@ -1464,7 +1463,7 @@ PASSEMBLY Assembly_AssembleFromFile(CSTRING file)
         }
         else if ((code = MnemonicToCode(token)) != -1)
         {
-            DEBUG("instruction %s (0x%02x)\n", token, (BYTE)code);
+            printf("instruction %s (0x%02x)\n", token, (BYTE)code);
             if (!Assembly_Reserve(asm_, asm_->size + sizeof(BYTE)))
                 goto cleanup;
             asm_->data[asm_->size] = (BYTE)code;
@@ -1474,7 +1473,7 @@ PASSEMBLY Assembly_AssembleFromFile(CSTRING file)
         }
         else
         {
-            DEBUG("pending lable \"%s\"\n", token);
+            printf("pending lable \"%s\"\n", token);
             if (!StringUIntMap_Add(pending_label, token, asm_->size))
                 goto cleanup;
             asm_->size += sizeof(UINT);
@@ -1485,22 +1484,22 @@ PASSEMBLY Assembly_AssembleFromFile(CSTRING file)
 
     for (i = 0; i < pending_label->size; ++i)
     {
-        DEBUG("pending label \"%s\"\n", pending_label->data[i].label);
+        printf("pending label \"%s\"\n", pending_label->data[i].label);
 
         if (!StringUIntMap_Find(label_to_address, pending_label->data[i].label, &value))
         {
-            DEBUG("unresolved lable \"%s\"\n", pending_label->data[i].label);
+            printf("unresolved lable \"%s\"\n", pending_label->data[i].label);
             goto cleanup;
         }
         if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
             goto cleanup; 
         WriteUInt(&asm_->data[pending_label->data[i].addr], value);
-        DEBUG("pending label \"%s\" 0x%08X is resolved to 0x%08X\n", pending_label->data[i].label, pending_label->data[i].addr, value);
+        printf("pending label \"%s\" 0x%08X is resolved to 0x%08X\n", pending_label->data[i].label, pending_label->data[i].addr, value);
     }
 
     for (i = 0; i < label_to_address->size; ++i)
     {
-        DEBUG("label \"%s\" 0x%08X\n", label_to_address->data[i].label, label_to_address->data[i].addr);
+        printf("label \"%s\" 0x%08X\n", label_to_address->data[i].label, label_to_address->data[i].addr);
     }
 
     valid = TRUE;
@@ -1711,7 +1710,7 @@ VOID DumpMemory(PMEMORY mem, UINT addr, UINT size)
     for (i = 0; i < size; ++i)
     {
         code = *Memory_Data(mem, addr + i);
-        DEBUG("0x%08X 0x%02x (%s)", addr + i, code, CodeToMnemonic(code));
+        printf("0x%08X 0x%02x (%s)", addr + i, code, CodeToMnemonic(code));
     }
 }
 
