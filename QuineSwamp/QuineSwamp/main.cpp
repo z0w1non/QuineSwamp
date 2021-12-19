@@ -247,11 +247,11 @@ BOOL Memory_OutOfMemory(PMEMORY mem, UINT addr);
 CSTRING CodeToMnemonic(BYTE code);
 UINT MnemonicToCode(CSTRING mnemonic);
 INSTRUCTION_IMPL CodeToImpl(BYTE code);
-BOOL StringToUint(CSTRING s, PUINT value);
+BOOL StringToUInt(CSTRING s, PUINT value);
 BOOL IsLabel(CSTRING s);
 
-UINT ReadUInt(PBYTE destination);
-VOID WriteUInt(PBYTE destination, UINT value);
+UINT ReadDoubleWord(PBYTE destination);
+VOID WriteDoubleWord(PBYTE destination, UINT value);
 BOOL ReplaceExtension(CSTRING source, PCHAR replaced, CSTRING extension);
 BOOL GetBaseName(CSTRING source, PCHAR destination);
 BOOL GetAssemblyFilePath(CSTRING source, PCHAR destination);
@@ -1197,7 +1197,7 @@ INSTRUCTION_IMPL CodeToImpl(BYTE code)
     return instruction_info_table[code].impl;
 }
 
-BOOL StringToUint(CSTRING s, PUINT value)
+BOOL StringToUInt(CSTRING s, PUINT value)
 {
     CSTRING cur;
 
@@ -1261,7 +1261,14 @@ BOOL IsLabel(CSTRING s)
     return TRUE;
 }
 
-UINT ReadUInt(PBYTE destination)
+BOOL IsDataPrefix(CSTRING s)
+{
+    return stricmp(s, "dd") == 0
+        || stricmp(s, "dw") == 0
+        || stricmp(s, "db") == 0;
+}
+
+UINT ReadValue(PBYTE destination, UINT bytes)
 {
     UINT i, value;
     value = 0;
@@ -1270,11 +1277,41 @@ UINT ReadUInt(PBYTE destination)
     return value;
 }
 
-VOID WriteUInt(PBYTE destination, UINT value)
+DWORD ReadDoubleWord(PBYTE destination)
+{
+    return ReadValue(destination, sizeof(DWORD));
+}
+
+WORD ReadWord(PBYTE destination)
+{
+    return ReadValue(destination, sizeof(WORD)) & 0xFFFF;
+}
+
+BYTE ReadByte(PBYTE destination)
+{
+    return ReadValue(destination, sizeof(WORD)) & 0xFF;
+}
+
+VOID WriteValue(PBYTE destination, UINT value, UINT bytes)
 {
     UINT i;
-    for (i = 0; i < sizeof(UINT); ++i)
+    for (i = 0; i < bytes; ++i)
         destination[i] = ((value >> (8 * i)) & 0xff);
+}
+
+VOID WriteDoubleWord(PBYTE destination, UINT value)
+{
+    WriteValue(destination, value, sizeof(DWORD));
+}
+
+VOID WriteWord(PBYTE destination, WORD value)
+{
+    WriteValue(destination, value, sizeof(WORD));
+}
+
+VOID WriteByte(PBYTE destination, BYTE value)
+{
+    WriteValue(destination, value, sizeof(BYTE));
 }
 
 BOOL ReplaceExtension(CSTRING source, PCHAR replaced, CSTRING extension)
@@ -1507,13 +1544,13 @@ PASSEMBLY Assembly_AssembleFromFile(CSTRING file)
 
             token = next_token + 2;
         }
-        else if (StringUIntMap_Find(label_to_address, token, &value) || StringToUint(token, &value))
+        else if (StringUIntMap_Find(label_to_address, token, &value) || StringToUInt(token, &value))
         {
             printf("value 0x%08X\n", value);
-            if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
+            if (!Assembly_Reserve(asm_, asm_->size + sizeof(DWORD)))
                 goto cleanup;
-            WriteUInt(&asm_->data[asm_->size], value);
-            asm_->size += sizeof(value);
+            WriteDoubleWord(&asm_->data[asm_->size], value);
+            asm_->size += sizeof(DWORD);
 
             token = next_token;
         }
@@ -1526,6 +1563,29 @@ PASSEMBLY Assembly_AssembleFromFile(CSTRING file)
             asm_->size += sizeof(BYTE);
 
             token = next_token;
+        }
+        else if (IsDataPrefix(token) && StringToUInt(next_token, &value))
+        {
+            if (stricmp(token, "dd") == 0)
+            {
+                WriteDoubleWord(&asm_->data[asm_->size], (DWORD)value);
+                asm_->size += sizeof(DWORD);
+            }
+            else if (stricmp(token, "dw") == 0)
+            {
+                WriteWord(&asm_->data[asm_->size], (WORD)value);
+                asm_->size += sizeof(WORD);
+            }
+            else/* if (stricmp(token, "db") == 0)*/
+            {
+                WriteByte(&asm_->data[asm_->size], (BYTE)value);
+                asm_->size += sizeof(BYTE);
+            }
+
+            token = next_token;
+            while (*token)
+                ++token;
+            ++token;
         }
         else
         {
@@ -1549,7 +1609,7 @@ PASSEMBLY Assembly_AssembleFromFile(CSTRING file)
         }
         if (!Assembly_Reserve(asm_, asm_->size + sizeof(value)))
             goto cleanup; 
-        WriteUInt(&asm_->data[pending_label->data[i].addr], value);
+        WriteDoubleWord(&asm_->data[pending_label->data[i].addr], value);
         printf("pending label \"%s\" 0x%08X is resolved to 0x%08X\n", pending_label->data[i].label, pending_label->data[i].addr, value);
     }
 
