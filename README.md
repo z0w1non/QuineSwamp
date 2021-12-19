@@ -115,9 +115,9 @@ FUGA:
 MYLABEL:
 0x12345678
 
-dd 0xDEADC0DE
-dw 0xC0DE
-db 0xAB
+IDD DD 0xDEADC0DE
+IDW DW 0xC0DE
+IDB DB 0xAB
 ```
 
 ニーモニックを複数行に記述する。
