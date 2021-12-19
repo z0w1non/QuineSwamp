@@ -71,7 +71,9 @@ enum INSTRUCTION
     STB    ,
     SAVE   ,
     SWAP   ,
-    SET    ,
+    IDD    ,
+    IDW    ,
+    IDB    ,
     JMP    ,
     JEZ    ,
     PUSH   ,
@@ -974,13 +976,13 @@ BOOL IMPL(SWAP)(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
-BOOL IMPL(SET)(PWORLD wld, PPROCESSOR prcs)
+inline BOOL ID(PWORLD wld, PPROCESSOR prcs, UINT bytes)
 {
     UINT i, value;
     BYTE data;
 
     value = 0;
-    for (i = 0; i < sizeof(UINT); ++i)
+    for (i = 0; i < bytes; ++i)
     {
         if (!Memory_Read(wld->mem, prcs, prcs->pc + 1 + i, &data))
         {
@@ -991,8 +993,23 @@ BOOL IMPL(SET)(PWORLD wld, PPROCESSOR prcs)
     }
     prcs->acc = value;
     Debug("%s.ACC <- 0x%08X\n", prcs->name, prcs->acc);
-    Processor_IncreceProgramCounter(prcs, 1 + sizeof(UINT));
+    Processor_IncreceProgramCounter(prcs, 1 + bytes);
     return TRUE;
+}
+
+BOOL IMPL(IDD)(PWORLD wld, PPROCESSOR prcs)
+{
+    return ID(wld, prcs, sizeof(DWORD));
+}
+
+BOOL IMPL(IDW)(PWORLD wld, PPROCESSOR prcs)
+{
+    return ID(wld, prcs, sizeof(WORD));
+}
+
+BOOL IMPL(IDB)(PWORLD wld, PPROCESSOR prcs)
+{
+    return ID(wld, prcs, sizeof(BYTE));
 }
 
 BOOL IMPL(JMP)(PWORLD wld, PPROCESSOR prcs)
@@ -1160,7 +1177,9 @@ INSTRUCTION_INFO instruction_info_table[] = {
     DECLARE_INSTRUCTION_INFO(STB    ),
     DECLARE_INSTRUCTION_INFO(SAVE   ),
     DECLARE_INSTRUCTION_INFO(SWAP   ),
-    DECLARE_INSTRUCTION_INFO(SET    ),
+    DECLARE_INSTRUCTION_INFO(IDD    ),
+    DECLARE_INSTRUCTION_INFO(IDW    ),
+    DECLARE_INSTRUCTION_INFO(IDB    ),
     DECLARE_INSTRUCTION_INFO(JMP    ),
     DECLARE_INSTRUCTION_INFO(JEZ    ),
     DECLARE_INSTRUCTION_INFO(PUSH   ),
