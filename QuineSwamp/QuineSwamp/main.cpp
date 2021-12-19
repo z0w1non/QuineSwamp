@@ -43,6 +43,8 @@ typedef size_t SIZE_T;
 
 #define IMPL(mnemonic) mnemonic ## _IMPL
 
+#define MAX_SEARCH_OFFSET 256
+
 enum
 {
     SYSTEM = 0,
@@ -76,6 +78,12 @@ enum INSTRUCTION
     IDB    ,
     JMP    ,
     JEZ    ,
+    FJD    ,
+    FJW    ,
+    FJB    ,
+    BJD    ,
+    BJW    ,
+    BJB    ,
     PUSH   ,
     POP    ,
     CALL   ,
@@ -251,6 +259,17 @@ UINT MnemonicToCode(CSTRING mnemonic);
 INSTRUCTION_IMPL CodeToImpl(BYTE code);
 BOOL StringToUInt(CSTRING s, PUINT value);
 BOOL IsLabel(CSTRING s);
+BOOL IsDataPrefix(CSTRING s);
+
+UINT ReadValue(PBYTE destination, UINT bytes);
+DWORD ReadDoubleWord(PBYTE destination);
+WORD ReadWord(PBYTE destination);
+BYTE ReadByte(PBYTE destination);
+
+VOID WriteValue(PBYTE destination, UINT value, UINT bytes);
+VOID WriteDoubleWord(PBYTE destination, UINT value);
+VOID WriteWord(PBYTE destination, WORD value);
+VOID WriteByte(PBYTE destination, BYTE value);
 
 UINT ReadDoubleWord(PBYTE destination);
 VOID WriteDoubleWord(PBYTE destination, UINT value);
@@ -1031,6 +1050,108 @@ BOOL IMPL(JEZ)(PWORLD wld, PPROCESSOR prcs)
     return TRUE;
 }
 
+inline BOOL ForwardSearch(PMEMORY mem, UINT begin, DWORD target, UINT bytes, PUINT result)
+{
+    UINT cur, temp, cnt;
+
+    cur = begin;
+    cnt = 0;
+    while (cnt < MAX_SEARCH_OFFSET)
+    {
+        if (cur == 0)
+            return FALSE;
+        temp = ReadValue(Memory_Data(mem, cur), bytes);
+        if (temp == target)
+        {
+            if (result)
+                *result = cur;
+            return TRUE;
+        }
+        --cur;
+        ++cnt;
+    }
+    return FALSE;
+}
+
+inline BOOL BackwardSearch(PMEMORY mem, UINT begin, DWORD target, UINT bytes, PUINT result)
+{
+    UINT cur, temp, cnt;
+
+    cur = begin;
+    cnt = 0;
+    while (cnt < MAX_SEARCH_OFFSET)
+    {
+        if (cur + bytes > mem->size)
+            return FALSE;
+        temp = ReadValue(Memory_Data(mem, cur), bytes);
+        if (temp == target)
+        {
+            if (result)
+                *result = cur;
+            return TRUE;
+        }
+        ++cur;
+        ++cnt;
+    }
+    return FALSE;
+}
+
+inline BOOL FJ(PWORLD wld, PPROCESSOR prcs, UINT bytes)
+{
+    UINT globaladdr;
+    if (ForwardSearch(wld->mem, prcs->pc, prcs->acc, bytes, &globaladdr))
+    {
+        prcs->pc = globaladdr - prcs->addr;
+        Debug("%s.PC <- 0x%08X\n", prcs->name, prcs->pc);
+        Processor_RoundProgramCounter(prcs);
+    }
+    Processor_IncreceProgramCounter(prcs, 1);
+    return TRUE;
+}
+
+BOOL IMPL(FJD)(PWORLD wld, PPROCESSOR prcs)
+{
+    return FJ(wld, prcs, sizeof(DWORD));
+}
+
+BOOL IMPL(FJW)(PWORLD wld, PPROCESSOR prcs)
+{
+    return FJ(wld, prcs, sizeof(WORD));
+}
+
+BOOL IMPL(FJB)(PWORLD wld, PPROCESSOR prcs)
+{
+    return FJ(wld, prcs, sizeof(BYTE));
+}
+
+inline BOOL BJ(PWORLD wld, PPROCESSOR prcs, UINT bytes)
+{
+    UINT globaladdr;
+    if (BackwardSearch(wld->mem, prcs->pc, prcs->acc, bytes, &globaladdr))
+    {
+        prcs->pc = globaladdr - prcs->addr;
+        Debug("%s.PC <- 0x%08X\n", prcs->name, prcs->pc);
+        Processor_RoundProgramCounter(prcs);
+    }
+    Processor_IncreceProgramCounter(prcs, 1);
+    return TRUE;
+}
+
+BOOL IMPL(BJD)(PWORLD wld, PPROCESSOR prcs)
+{
+    return BJ(wld, prcs, sizeof(DWORD));
+}
+
+BOOL IMPL(BJW)(PWORLD wld, PPROCESSOR prcs)
+{
+    return BJ(wld, prcs, sizeof(WORD));
+}
+
+BOOL IMPL(BJB)(PWORLD wld, PPROCESSOR prcs)
+{
+    return BJ(wld, prcs, sizeof(BYTE));
+}
+
 BOOL IMPL(PUSH)(PWORLD wld, PPROCESSOR prcs)
 {
     --prcs->sp;
@@ -1182,6 +1303,12 @@ INSTRUCTION_INFO instruction_info_table[] = {
     DECLARE_INSTRUCTION_INFO(IDB    ),
     DECLARE_INSTRUCTION_INFO(JMP    ),
     DECLARE_INSTRUCTION_INFO(JEZ    ),
+    DECLARE_INSTRUCTION_INFO(FJD    ),
+    DECLARE_INSTRUCTION_INFO(FJW    ),
+    DECLARE_INSTRUCTION_INFO(FJB    ),
+    DECLARE_INSTRUCTION_INFO(BJD    ),
+    DECLARE_INSTRUCTION_INFO(BJW    ),
+    DECLARE_INSTRUCTION_INFO(BJB    ),
     DECLARE_INSTRUCTION_INFO(PUSH   ),
     DECLARE_INSTRUCTION_INFO(POP    ),
     DECLARE_INSTRUCTION_INFO(CALL   ),
