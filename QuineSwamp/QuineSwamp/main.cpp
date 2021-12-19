@@ -11,7 +11,7 @@
 typedef unsigned char BYTE, * PBYTE;
 typedef unsigned char BOOL;
 typedef unsigned int UINT, * PUINT;
-typedef unsigned int DWORD, * PDOWRD;
+typedef unsigned int DWORD, * PDWORD;
 typedef unsigned short WORD, * PWORD;
 typedef int INT, * PINT;
 typedef char CHAR, * PCHAR, * STRING;
@@ -270,6 +270,8 @@ VOID WriteValue(PBYTE destination, UINT value, UINT bytes);
 VOID WriteDoubleWord(PBYTE destination, UINT value);
 VOID WriteWord(PBYTE destination, WORD value);
 VOID WriteByte(PBYTE destination, BYTE value);
+
+VOID SizeCast(PUINT value, UINT bytes);
 
 UINT ReadDoubleWord(PBYTE destination);
 VOID WriteDoubleWord(PBYTE destination, UINT value);
@@ -1099,7 +1101,12 @@ inline BOOL BackwardSearch(PMEMORY mem, UINT begin, DWORD target, UINT bytes, PU
 inline BOOL FJ(PWORLD wld, PPROCESSOR prcs, UINT bytes)
 {
     UINT globaladdr;
-    if (ForwardSearch(wld->mem, prcs->pc, prcs->acc, bytes, &globaladdr))
+    UINT target;
+    
+    target = prcs->acc;
+    SizeCast(&target, bytes);
+
+    if (ForwardSearch(wld->mem, prcs->pc, target, bytes, &globaladdr))
     {
         prcs->pc = globaladdr - prcs->addr;
         Debug("%s.PC <- 0x%08X\n", prcs->name, prcs->pc);
@@ -1127,7 +1134,12 @@ BOOL IMPL(FJB)(PWORLD wld, PPROCESSOR prcs)
 inline BOOL BJ(PWORLD wld, PPROCESSOR prcs, UINT bytes)
 {
     UINT globaladdr;
-    if (BackwardSearch(wld->mem, prcs->pc, prcs->acc, bytes, &globaladdr))
+    UINT target;
+
+    target = prcs->acc;
+    SizeCast(&target, bytes);
+    
+    if (BackwardSearch(wld->mem, prcs->pc, target, bytes, &globaladdr))
     {
         prcs->pc = globaladdr - prcs->addr;
         Debug("%s.PC <- 0x%08X\n", prcs->name, prcs->pc);
@@ -1458,6 +1470,21 @@ VOID WriteWord(PBYTE destination, WORD value)
 VOID WriteByte(PBYTE destination, BYTE value)
 {
     WriteValue(destination, value, sizeof(BYTE));
+}
+
+VOID SizeCast(PDWORD value, UINT bytes)
+{
+    switch (bytes)
+    {
+        case sizeof(DWORD) :
+            break;
+        case sizeof(WORD) :
+            *value &= 0xFFFF;
+            break;
+        case sizeof(BYTE) :
+            *value &= 0xFF;
+            break;
+    }
 }
 
 BOOL ReplaceExtension(CSTRING source, PCHAR replaced, CSTRING extension)
